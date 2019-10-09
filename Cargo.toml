@@ -1,0 +1,23 @@
+[package]
+name = "aw-watcher-window-wayland"
+version = "0.1.0"
+authors = ["Johan Bjäreholt <johan@bjareho.lt>"]
+edition = "2018"
+build = "src/build.rs"
+
+[build-dependencies]
+wayland-scanner = "0.24"
+
+[dependencies]
+smallvec = "0.6"
+lazy_static = "1.2"
+wayland-client = "0.24"
+wayland-commons = "0.24"
+wayland-sys = "0.24"
+serde_json = "*"
+chrono = "*"
+
+mio = "0.6"
+timerfd = "*"
+
+aw_client_rust = { git = "https://github.com/ActivityWatch/aw-client-rust.git" }
