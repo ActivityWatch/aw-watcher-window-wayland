@@ -115,11 +115,16 @@ fn main() {
                         client.heartbeat(window_bucket, &window_event, HEARTBEAT_INTERVAL_MARGIN_S).unwrap();
                     }
 
-                    let current_window = current_window::get_focused_window();
-
-                    let window_event = window_to_event(&current_window);
-                    client.heartbeat(window_bucket, &window_event, HEARTBEAT_INTERVAL_MARGIN_S).unwrap();
-                    prev_window = Some(current_window);
+                    match current_window::get_focused_window() {
+                        Some(current_window) => {
+                            let window_event = window_to_event(&current_window);
+                            client.heartbeat(window_bucket, &window_event, HEARTBEAT_INTERVAL_MARGIN_S).unwrap();
+                            prev_window = Some(current_window);
+                        },
+                        None => {
+                            prev_window = None;
+                        },
+                    }
 
                     let afk_event = idle::get_current_afk_event();
                     client.heartbeat(afk_bucket, &afk_event, HEARTBEAT_INTERVAL_MARGIN_S).unwrap();

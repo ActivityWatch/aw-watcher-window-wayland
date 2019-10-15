@@ -25,11 +25,14 @@ lazy_static! {
     });
 }
 
-pub fn get_focused_window() -> Window {
+pub fn get_focused_window() -> Option<Window> {
     let window_state = WINDOW_STATE_LOCKED.lock()
         .expect("Unable to take lock");
     let current_window_id = window_state.current_window.expect("No focused window yet");
-    window_state.all_windows.get(&current_window_id).unwrap().clone()
+    match window_state.all_windows.get(&current_window_id) {
+        Some(window_ref) => Some(window_ref.clone()),
+        None => None
+    }
 }
 
 fn assign_toplevel_handle(toplevel_handle: &wayland_client::Main<ToplevelHandle>) -> () {
