@@ -14,10 +14,9 @@ lazy_static = "1.2"
 wayland-client = "0.24"
 wayland-commons = "0.24"
 wayland-sys = "0.24"
-serde_json = "*"
-chrono = "*"
-
+serde_json = "1.0"
+chrono = "0.4"
 mio = "0.6"
-timerfd = "*"
+timerfd = "1.0"
 
 aw_client_rust = { git = "https://github.com/ActivityWatch/aw-client-rust.git" }
