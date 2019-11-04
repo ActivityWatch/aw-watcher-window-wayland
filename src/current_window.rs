@@ -46,11 +46,15 @@ fn assign_toplevel_handle(toplevel_handle: &wayland_client::Main<ToplevelHandle>
             match event {
                 HandleEvent::AppId{ app_id } => {
                     //println!("appid: {}", app_id);
-                    window_state.all_windows.get_mut(&id).unwrap().appid = app_id.clone();
+                    let window = window_state.all_windows.get_mut(&id)
+                        .expect("Tried to change appid on a non-existing window");
+                    window.appid = app_id.clone();
                 },
                 HandleEvent::Title{ title } => {
                     //println!("title: {}", title);
-                    window_state.all_windows.get_mut(&id).unwrap().title = title.clone();
+                    let window = window_state.all_windows.get_mut(&id)
+                        .expect("Tried to change title on a non-existing window");
+                    window.title = title.clone();
                 },
                 HandleEvent::State{ state } => {
                     // TODO: Remove this clone
@@ -63,7 +67,8 @@ fn assign_toplevel_handle(toplevel_handle: &wayland_client::Main<ToplevelHandle>
                 }
                 HandleEvent::Done => (),//println!("done"),
                 HandleEvent::Closed => {
-                    let closed_window = window_state.all_windows.remove(&id).unwrap();
+                    let closed_window = window_state.all_windows.remove(&id)
+                        .expect("Tried to remove window which does not exist");
                     println!("closed {}", closed_window.appid)
                 },
                 _ => println!("Unknown toplevel handle event")
@@ -76,7 +81,8 @@ pub fn assign_toplevel_manager(globals: &wayland_client::GlobalManager) -> () {
 
     globals
         .instantiate_exact::<ToplevelManager>(1)
-        .unwrap()
+        .expect("Wayland session does not expose a ToplevelManager object, \
+                 this window manager is most likely not supported")
         .assign_mono(move |_toplevel_manager : Main<ToplevelManager>, event| {
             match event {
                 ToplevelEvent::Toplevel{ toplevel: handle } => {
@@ -91,7 +97,8 @@ pub fn assign_toplevel_manager(globals: &wayland_client::GlobalManager) -> () {
                     windows_state.all_windows.insert(id, window);
                     assign_toplevel_handle(&handle);
                 }
-                ToplevelEvent::Finished => println!("Finished?"), // TODO: What do do here?
+                // TODO: What do do at finish?
+                ToplevelEvent::Finished => println!("Finished?"),
                 _ => panic!("Got an unexpected event!")
             }
         });

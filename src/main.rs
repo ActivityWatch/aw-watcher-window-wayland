@@ -62,7 +62,8 @@ fn main() {
 
     println!("### Fetching wayland globals");
     let globals = wayland_client::GlobalManager::new(&attached_display);
-    event_queue.sync_roundtrip(|_, _| unreachable!()).unwrap();
+    event_queue.sync_roundtrip(|_, _| unreachable!())
+        .expect("Failed to sync_roundtrip when fetching globals");
 
     println!("### Setting up toplevel manager");
     current_window::assign_toplevel_manager(&globals);
@@ -76,10 +77,12 @@ fn main() {
         .expect("event_queue sync_roundtrip failure");
 
     println!("### Preparing poll fds");
-    let poll = Poll::new().unwrap();
+    let poll = Poll::new()
+        .expect("Failed to create poll fds");
     let fd = event_queue.get_connection_fd();
 
-    let mut timer = TimerFd::new().unwrap();
+    let mut timer = TimerFd::new()
+        .expect("Failed to create timer fd");
     let timer_state = TimerState::Periodic {
         current: Duration::from_secs(1),
         interval: Duration::from_millis(HEARTBEAT_INTERVAL_MS as u64)
@@ -87,21 +90,25 @@ fn main() {
     let timer_flags = SetTimeFlags::Default;
     timer.set_state(timer_state, timer_flags);
 
-    poll.register(&EventedFd(&fd), STATE_CHANGE, Ready::readable(), PollOpt::empty()).unwrap();
-    poll.register(&EventedFd(&timer.as_raw_fd()), TIMER, Ready::readable(), PollOpt::empty()).unwrap();
+    poll.register(&EventedFd(&fd), STATE_CHANGE, Ready::readable(), PollOpt::empty())
+        .expect("Failed to register state_change fd");
+    poll.register(&EventedFd(&timer.as_raw_fd()), TIMER, Ready::readable(), PollOpt::empty())
+        .expect("Failed to register timer fd");
 
     println!("### Creating aw-client");
     let client = aw_client_rust::AwClient::new("localhost", "5600", "aw-watcher-wayland");
     let window_bucket = "aw-watcher-wayland-window";
     let afk_bucket = "aw-watcher-wayland-afk";
-    client.create_bucket(window_bucket, "currentwindow").unwrap();
-    client.create_bucket(afk_bucket, "afkstatus").unwrap();
+    client.create_bucket(window_bucket, "currentwindow")
+        .expect("Failed to create window bucket");
+    client.create_bucket(afk_bucket, "afkstatus")
+        .expect("Failed to create afk bucket");
 
     println!("### Watcher is now running");
     let mut events = Events::with_capacity(1);
     let mut prev_window : Option<current_window::Window> = None;
     loop {
-        poll.poll(&mut events, None).unwrap();
+        poll.poll(&mut events, None).expect("Failed to poll fds");
         for event in &events {
             match event.token() {
                 STATE_CHANGE => {
@@ -112,13 +119,15 @@ fn main() {
 
                     if let Some(ref prev_window) = prev_window {
                         let window_event = window_to_event(&prev_window);
-                        client.heartbeat(window_bucket, &window_event, HEARTBEAT_INTERVAL_MARGIN_S).unwrap();
+                        client.heartbeat(window_bucket, &window_event, HEARTBEAT_INTERVAL_MARGIN_S)
+                            .expect("Failed to send heartbeat");
                     }
 
                     match current_window::get_focused_window() {
                         Some(current_window) => {
                             let window_event = window_to_event(&current_window);
-                            client.heartbeat(window_bucket, &window_event, HEARTBEAT_INTERVAL_MARGIN_S).unwrap();
+                            client.heartbeat(window_bucket, &window_event, HEARTBEAT_INTERVAL_MARGIN_S)
+                                .expect("Failed to send heartbeat");
                             prev_window = Some(current_window);
                         },
                         None => {
@@ -127,7 +136,8 @@ fn main() {
                     }
 
                     let afk_event = idle::get_current_afk_event();
-                    client.heartbeat(afk_bucket, &afk_event, HEARTBEAT_INTERVAL_MARGIN_S).unwrap();
+                    client.heartbeat(afk_bucket, &afk_event, HEARTBEAT_INTERVAL_MARGIN_S)
+                        .expect("Failed to send heartbeat");
                 },
                 TIMER => {
                     //println!("timer!");
@@ -135,11 +145,14 @@ fn main() {
 
                     if let Some(ref prev_window) = prev_window {
                         let window_event = window_to_event(&prev_window);
-                        client.heartbeat(window_bucket, &window_event, HEARTBEAT_INTERVAL_MARGIN_S).unwrap();
+                        client.heartbeat(window_bucket, &window_event, HEARTBEAT_INTERVAL_MARGIN_S)
+                            .expect("Failed to send heartbeat");
                     }
 
                     let afk_event = idle::get_current_afk_event();
-                    client.heartbeat(afk_bucket, &afk_event, HEARTBEAT_INTERVAL_MARGIN_S).unwrap();
+                    client.heartbeat(afk_bucket, &afk_event, HEARTBEAT_INTERVAL_MARGIN_S)
+                        .expect("Failed to send heartbeat");
+
                 },
                 _ => panic!("Invalid token!")
             }
