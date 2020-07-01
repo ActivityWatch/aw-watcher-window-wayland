@@ -9,7 +9,7 @@ Only supports wayland window managers that implements the following wayland prot
 - idle.xml (most)
 - wlr-foreign-toplevel-management-unstable-v1.xml (very few)
 
-Following window managers are tested:
+Following window managers have implemented these protocols:
 - phosh
-- sway (with wlr-foreign-toplevel-management patch https://github.com/swaywm/sway/pull/4476)
-
+- sway (for Xwayland support this patch is needed https://github.com/swaywm/sway/pull/5478)
+- Wayfire (Not tested, but might work)
