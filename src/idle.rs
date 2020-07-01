@@ -58,7 +58,11 @@ pub fn get_current_afk_event() -> AwEvent {
     };
 
     let mut data = Map::new();
-    data.insert("afk".to_string(), Value::Bool(afk_state.is_afk));
+    let json_afk_state = match afk_state.is_afk {
+        true => Value::String("afk".to_string()),
+        false => Value::String("not-afk".to_string()),
+    };
+    data.insert("afk".to_string(), json_afk_state);
 
     AwEvent {
         id: None,
