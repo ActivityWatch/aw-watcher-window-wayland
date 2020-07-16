@@ -102,8 +102,8 @@ fn main() {
 
     println!("### Creating aw-client");
     let client = aw_client_rust::AwClient::new("localhost", "5600", "aw-watcher-wayland");
-    let window_bucket = "aw-watcher-wayland-window";
-    let afk_bucket = "aw-watcher-wayland-afk";
+    let window_bucket = "aw-watcher-window";
+    let afk_bucket = "aw-watcher-afk";
     client.create_bucket(window_bucket, "currentwindow")
         .expect("Failed to create window bucket");
     client.create_bucket(afk_bucket, "afkstatus")
