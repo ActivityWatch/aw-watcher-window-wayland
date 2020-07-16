@@ -10,6 +10,6 @@ Only supports wayland window managers that implements the following wayland prot
 - wlr-foreign-toplevel-management-unstable-v1.xml (very few)
 
 Following window managers have implemented these protocols:
-- phosh
-- sway (for Xwayland support this patch is needed https://github.com/swaywm/sway/pull/5478)
+- phosh (works)
+- sway (works on version 1.5 and up)
 - Wayfire (Not tested, but might work)
