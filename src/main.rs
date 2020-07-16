@@ -14,6 +14,7 @@ use chrono::prelude::*;
 mod wl_client;
 mod current_window;
 mod idle;
+mod singleinstance;
 
 
 use mio::{Poll, Token, PollOpt, Ready, Events};
@@ -94,6 +95,10 @@ fn main() {
         .expect("Failed to register state_change fd");
     poll.register(&EventedFd(&timer.as_raw_fd()), TIMER, Ready::readable(), PollOpt::empty())
         .expect("Failed to register timer fd");
+
+    println!("### Taking client locks");
+    let _window_lock = singleinstance::get_client_lock("aw-watcher-window-at-localhost-on-5600").unwrap();
+    let _afk_lock = singleinstance::get_client_lock("aw-watcher-afk-at-localhost-on-5600").unwrap();
 
     println!("### Creating aw-client");
     let client = aw_client_rust::AwClient::new("localhost", "5600", "aw-watcher-wayland");
