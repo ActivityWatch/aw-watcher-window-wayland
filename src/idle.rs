@@ -62,7 +62,7 @@ pub fn get_current_afk_event() -> AwEvent {
         true => Value::String("afk".to_string()),
         false => Value::String("not-afk".to_string()),
     };
-    data.insert("afk".to_string(), json_afk_state);
+    data.insert("status".to_string(), json_afk_state);
 
     AwEvent {
         id: None,
