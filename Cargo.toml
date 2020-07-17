@@ -20,5 +20,6 @@ mio = "0.6"
 timerfd = "1.0"
 file-lock = "1.1"
 appdirs = "0.2"
+gethostname = "0.2"
 
 aw_client_rust = { git = "https://github.com/ActivityWatch/aw-client-rust.git" }

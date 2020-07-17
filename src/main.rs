@@ -3,6 +3,7 @@ extern crate wayland_sys;
 extern crate wayland_client;
 extern crate aw_client_rust;
 extern crate chrono;
+extern crate gethostname;
 
 #[macro_use] extern crate lazy_static;
 
@@ -102,11 +103,12 @@ fn main() {
 
     println!("### Creating aw-client");
     let client = aw_client_rust::AwClient::new("localhost", "5600", "aw-watcher-wayland");
-    let window_bucket = "aw-watcher-window";
-    let afk_bucket = "aw-watcher-afk";
-    client.create_bucket(window_bucket, "currentwindow")
+    let hostname = gethostname::gethostname().into_string().unwrap();
+    let window_bucket = format!("aw-watcher-window_{}", hostname);
+    let afk_bucket = format!("aw-watcher-afk_{}", hostname);
+    client.create_bucket(&window_bucket, "currentwindow")
         .expect("Failed to create window bucket");
-    client.create_bucket(afk_bucket, "afkstatus")
+    client.create_bucket(&afk_bucket, "afkstatus")
         .expect("Failed to create afk bucket");
 
     println!("### Watcher is now running");
@@ -124,14 +126,14 @@ fn main() {
 
                     if let Some(ref prev_window) = prev_window {
                         let window_event = window_to_event(&prev_window);
-                        client.heartbeat(window_bucket, &window_event, HEARTBEAT_INTERVAL_MARGIN_S)
+                        client.heartbeat(&window_bucket, &window_event, HEARTBEAT_INTERVAL_MARGIN_S)
                             .expect("Failed to send heartbeat");
                     }
 
                     match current_window::get_focused_window() {
                         Some(current_window) => {
                             let window_event = window_to_event(&current_window);
-                            client.heartbeat(window_bucket, &window_event, HEARTBEAT_INTERVAL_MARGIN_S)
+                            client.heartbeat(&window_bucket, &window_event, HEARTBEAT_INTERVAL_MARGIN_S)
                                 .expect("Failed to send heartbeat");
                             prev_window = Some(current_window);
                         },
@@ -141,7 +143,7 @@ fn main() {
                     }
 
                     let afk_event = idle::get_current_afk_event();
-                    client.heartbeat(afk_bucket, &afk_event, HEARTBEAT_INTERVAL_MARGIN_S)
+                    client.heartbeat(&afk_bucket, &afk_event, HEARTBEAT_INTERVAL_MARGIN_S)
                         .expect("Failed to send heartbeat");
                 },
                 TIMER => {
@@ -150,12 +152,12 @@ fn main() {
 
                     if let Some(ref prev_window) = prev_window {
                         let window_event = window_to_event(&prev_window);
-                        client.heartbeat(window_bucket, &window_event, HEARTBEAT_INTERVAL_MARGIN_S)
+                        client.heartbeat(&window_bucket, &window_event, HEARTBEAT_INTERVAL_MARGIN_S)
                             .expect("Failed to send heartbeat");
                     }
 
                     let afk_event = idle::get_current_afk_event();
-                    client.heartbeat(afk_bucket, &afk_event, HEARTBEAT_INTERVAL_MARGIN_S)
+                    client.heartbeat(&afk_bucket, &afk_event, HEARTBEAT_INTERVAL_MARGIN_S)
                         .expect("Failed to send heartbeat");
 
                 },
