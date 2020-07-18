@@ -4,26 +4,27 @@ extern crate wayland_client;
 extern crate aw_client_rust;
 extern crate chrono;
 extern crate gethostname;
+extern crate getopts;
 
 #[macro_use] extern crate lazy_static;
 
 #[macro_use] extern crate smallvec;
-
-use serde_json::{Map, Value};
-use chrono::prelude::*;
 
 mod wl_client;
 mod current_window;
 mod idle;
 mod singleinstance;
 
+use std::env;
+use std::time::Duration;
+use std::os::unix::io::AsRawFd;
 
 use mio::{Poll, Token, PollOpt, Ready, Events};
 use mio::unix::EventedFd;
-
 use timerfd::{TimerFd, TimerState, SetTimeFlags};
-use std::os::unix::io::AsRawFd;
-use std::time::Duration;
+
+use serde_json::{Map, Value};
+use chrono::prelude::*;
 
 fn get_wl_display() -> wayland_client::Display {
     match wayland_client::Display::connect_to_env() {
@@ -57,6 +58,26 @@ static HEARTBEAT_INTERVAL_MS : u32 = 5000;
 static HEARTBEAT_INTERVAL_MARGIN_S : f64 = (HEARTBEAT_INTERVAL_MS + 1000) as f64 / 1000.0;
 
 fn main() {
+    let args: Vec<String> = env::args().collect();
+    let program = args[0].clone();
+    let mut opts = getopts::Options::new();
+    opts.optflag("", "testing", "run in testing mode");
+    opts.optflag("h", "help", "print this help menu");
+    let matches = match opts.parse(&args[1..]) {
+        Ok(m) => m,
+        Err(f) => panic!(f.to_string()),
+    };
+    if matches.opt_present("h") {
+        let brief = format!("Usage: {} [options]", program);
+        print!("{}", opts.usage(&brief));
+        return;
+    }
+    // Always testing mode with "cargo run", enable testing on release build with --testing
+    let mut testing = cfg!(debug_assertions);
+    if matches.opt_present("testing") {
+        testing = true;
+    }
+
     println!("### Setting up display");
     let display = get_wl_display();
     let mut event_queue = display.create_event_queue();
@@ -98,11 +119,16 @@ fn main() {
         .expect("Failed to register timer fd");
 
     println!("### Taking client locks");
-    let _window_lock = singleinstance::get_client_lock("aw-watcher-window-at-localhost-on-5600").unwrap();
-    let _afk_lock = singleinstance::get_client_lock("aw-watcher-afk-at-localhost-on-5600").unwrap();
+    let host = "localhost";
+    let port = match testing {
+        true => "5666",
+        false => "5600"
+    };
+    let _window_lock = singleinstance::get_client_lock(&format!("aw-watcher-window-at-{}-on-{}", host, port)).unwrap();
+    let _afk_lock = singleinstance::get_client_lock(&format!("aw-watcher-afk-at-{}-on-{}", host, port)).unwrap();
 
     println!("### Creating aw-client");
-    let client = aw_client_rust::AwClient::new("localhost", "5600", "aw-watcher-wayland");
+    let client = aw_client_rust::AwClient::new(host, port, "aw-watcher-wayland");
     let hostname = gethostname::gethostname().into_string().unwrap();
     let window_bucket = format!("aw-watcher-window_{}", hostname);
     let afk_bucket = format!("aw-watcher-afk_{}", hostname);
