@@ -3,6 +3,8 @@ extern crate file_lock;
 extern crate appdirs;
 
 use file_lock::FileLock;
+use std::fs;
+use std::io;
 
 pub fn get_client_lock(clientname: &str) -> Result<FileLock, String> {
     // $XDG_USER_CACHE_DIR/activitywatch/client_locks/clientname
@@ -13,8 +15,15 @@ pub fn get_client_lock(clientname: &str) -> Result<FileLock, String> {
     path.push("client_locks");
     path.push(clientname);
 
+    if let Err(err) = fs::create_dir_all(path.clone()) {
+        match err.kind() {
+            io::ErrorKind::AlreadyExists => (),
+            _other_kind => return Err(format!("Failed to create client_locks dir: {}", err)),
+        }
+    }
+
     match FileLock::lock(&path.to_str().unwrap(), false, true) {
         Ok(lockfile) => Ok(lockfile),
-        Err(e) => Err(format!("Failed to get lock for client '{}': {}", clientname, e)),
+        Err(err) => Err(format!("Failed to get lock for client '{}': {}", clientname, err)),
     }
 }
