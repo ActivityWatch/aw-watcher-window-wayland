@@ -1,6 +1,6 @@
 //extern crate nix;
-extern crate file_lock;
 extern crate appdirs;
+extern crate file_lock;
 
 use file_lock::FileLock;
 use std::fs;
@@ -13,7 +13,6 @@ pub fn get_client_lock(clientname: &str) -> Result<FileLock, String> {
         Err(_) => return Err("Failed to fetch user_cache_dir".to_string()),
     };
     path.push("client_locks");
-    path.push(clientname);
 
     if let Err(err) = fs::create_dir_all(path.clone()) {
         match err.kind() {
@@ -22,8 +21,13 @@ pub fn get_client_lock(clientname: &str) -> Result<FileLock, String> {
         }
     }
 
+    path.push(clientname);
+
     match FileLock::lock(&path.to_str().unwrap(), false, true) {
         Ok(lockfile) => Ok(lockfile),
-        Err(err) => Err(format!("Failed to get lock for client '{}': {}", clientname, err)),
+        Err(err) => Err(format!(
+            "Failed to get lock for client '{}': {}",
+            clientname, err
+        )),
     }
 }
