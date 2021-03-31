@@ -5,6 +5,11 @@ Reports both window and afk status to the buckets aw-watcher-window and aw-watch
 
 **NOTE:** Does not support all wayland compositors, see "Compatibility" section below
 
+### Dependencies
+
+- pkg-config
+- openssl-dev (debian libssl1.0-dev)
+
 ### How to build
 
 1. Install rust and cargo (any recent stable version)
