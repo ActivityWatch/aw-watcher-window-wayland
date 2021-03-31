@@ -152,15 +152,19 @@ fn main() {
 
                     if let Some(ref prev_window) = prev_window {
                         let window_event = window_to_event(&prev_window);
-                        client.heartbeat(&window_bucket, &window_event, HEARTBEAT_INTERVAL_MARGIN_S)
-                            .expect("Failed to send heartbeat");
+                        if client.heartbeat(&window_bucket, &window_event, HEARTBEAT_INTERVAL_MARGIN_S).is_err() {
+                            println!("Failed to send heartbeat");
+                            break;
+                        }
                     }
 
                     match current_window::get_focused_window() {
                         Some(current_window) => {
                             let window_event = window_to_event(&current_window);
-                            client.heartbeat(&window_bucket, &window_event, HEARTBEAT_INTERVAL_MARGIN_S)
-                                .expect("Failed to send heartbeat");
+                            if client.heartbeat(&window_bucket, &window_event, HEARTBEAT_INTERVAL_MARGIN_S).is_err() {
+                                println!("Failed to send heartbeat");
+                                break;
+                            }
                             prev_window = Some(current_window);
                         },
                         None => {
@@ -169,8 +173,10 @@ fn main() {
                     }
 
                     let afk_event = idle::get_current_afk_event();
-                    client.heartbeat(&afk_bucket, &afk_event, HEARTBEAT_INTERVAL_MARGIN_S)
-                        .expect("Failed to send heartbeat");
+                    if client.heartbeat(&afk_bucket, &afk_event, HEARTBEAT_INTERVAL_MARGIN_S).is_err() {
+                        println!("Failed to send heartbeat");
+                        break;
+                    }
                 },
                 TIMER => {
                     //println!("timer!");
@@ -178,13 +184,17 @@ fn main() {
 
                     if let Some(ref prev_window) = prev_window {
                         let window_event = window_to_event(&prev_window);
-                        client.heartbeat(&window_bucket, &window_event, HEARTBEAT_INTERVAL_MARGIN_S)
-                            .expect("Failed to send heartbeat");
+                        if client.heartbeat(&window_bucket, &window_event, HEARTBEAT_INTERVAL_MARGIN_S).is_err() {
+                            println!("Failed to send heartbeat");
+                            break;
+                        }
                     }
 
                     let afk_event = idle::get_current_afk_event();
-                    client.heartbeat(&afk_bucket, &afk_event, HEARTBEAT_INTERVAL_MARGIN_S)
-                        .expect("Failed to send heartbeat");
+                    if client.heartbeat(&afk_bucket, &afk_event, HEARTBEAT_INTERVAL_MARGIN_S).is_err() {
+                        println!("Failed to send heartbeat");
+                        break;
+                    }
 
                 },
                 _ => panic!("Invalid token!")
