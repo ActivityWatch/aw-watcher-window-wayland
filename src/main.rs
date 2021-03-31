@@ -92,7 +92,7 @@ fn main() {
     current_window::assign_toplevel_manager(&globals);
 
     println!("### Setting up idle timeout");
-    idle::assign_idle_timeout(&globals, 120000, HEARTBEAT_INTERVAL_MS);
+    idle::assign_idle_timeout(&globals, 120000);
 
     println!("### Syncing roundtrip");
     event_queue

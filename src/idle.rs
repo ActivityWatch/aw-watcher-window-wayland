@@ -15,7 +15,6 @@ struct AfkState {
     is_afk: bool,
     state_start: DateTime<Utc>,
     timeout_ms: u32,
-    heartbeat_interval_ms: u32,
 }
 
 lazy_static! {
@@ -23,15 +22,13 @@ lazy_static! {
         is_afk: false,
         state_start: Utc::now(),
         timeout_ms: 0, /* gets set in start on assign_idle_timeout */
-        heartbeat_interval_ms: 0, /* gets set in start on assign_idle_timeout */
     });
 }
 
-fn init_afk_state(timeout_ms: u32, heartbeat_interval_ms: u32) {
+fn init_afk_state(timeout_ms: u32) {
     let mut afk_state = AFK_STATE_LOCKED.lock().expect("Unable to lock");
     afk_state.state_start = Utc::now();
     afk_state.timeout_ms = timeout_ms;
-    afk_state.heartbeat_interval_ms = heartbeat_interval_ms;
 }
 
 fn set_afk_state(afk: bool) {
@@ -73,8 +70,8 @@ pub fn get_current_afk_event() -> AwEvent {
 }
 
 pub fn assign_idle_timeout(globals: &wayland_client::GlobalManager,
-                           timeout_ms: u32, heartbeat_interval_ms: u32) -> () {
-    init_afk_state(timeout_ms, heartbeat_interval_ms);
+                           timeout_ms: u32) -> () {
+    init_afk_state(timeout_ms);
     let seat = globals.instantiate_exact::<WlSeat>(1)
         .expect("Wayland session does not expose a WlSeat object, \
                  this window manager is most likely not supported");
