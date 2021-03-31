@@ -22,6 +22,8 @@ Reports both window and afk status to the buckets aw-watcher-window and aw-watch
 2. Start aw-server (or aw-qt, but you need to disable aw-watcher-afk and aw-watcher-window so they don't conflict)
 3. Start aw-watcher-window-wayland
 
+If you want to autostart aw-watcher-window-wayland without aw-qt, you can use the .desktop file provided in this git
+
 ### Compatibility
 
 Only supports wayland window managers that implements the following wayland protocols:
