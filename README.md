@@ -30,7 +30,10 @@ Only supports wayland window managers that implements the following wayland prot
 - idle.xml (many)
 - wlr-foreign-toplevel-management-unstable-v1.xml (very few)
 
-Following window managers have implemented these protocols:
-- phosh (works)
-- sway (works on version 1.5 and up)
-- Wayfire (Not tested, but might work)
+| Window Manager | supported? | Details |
+|-----|-----|-----|
+| [phosh](https://gitlab.gnome.org/World/Phosh/phosh) | ✔️  | works |
+| [sway](https://swaywm.org/) | ✔️  | works on version 1.5 and up |
+| GNOME / [Mutter](https://gitlab.gnome.org/GNOME/mutter) | ❌ | no support for the protocols above |
+| [Wayfire](https://wayfire.org/) | | not tested, but might work |
+| KDE / [KWin](https://invent.kde.org/plasma/kwin) | |  |
