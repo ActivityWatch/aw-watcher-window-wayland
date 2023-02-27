@@ -44,8 +44,8 @@ fn window_to_event(window: &current_window::Window) -> aw_client_rust::Event {
     data.insert("title".to_string(), Value::String(window.title.clone()));
     aw_client_rust::Event {
         id: None,
-        timestamp: Utc::now().to_rfc3339(),
-        duration: 0.0,
+        timestamp: Utc::now(),
+        duration: chrono::Duration::milliseconds(0),
         data: data,
     }
 }
@@ -132,9 +132,9 @@ fn main() {
     let hostname = gethostname::gethostname().into_string().unwrap();
     let window_bucket = format!("aw-watcher-window_{}", hostname);
     let afk_bucket = format!("aw-watcher-afk_{}", hostname);
-    client.create_bucket(&window_bucket, "currentwindow")
+    client.create_bucket_simple(&window_bucket, "currentwindow")
         .expect("Failed to create window bucket");
-    client.create_bucket(&afk_bucket, "afkstatus")
+    client.create_bucket_simple(&afk_bucket, "afkstatus")
         .expect("Failed to create afk bucket");
 
     println!("### Watcher is now running");

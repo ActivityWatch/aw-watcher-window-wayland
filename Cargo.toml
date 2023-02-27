@@ -23,4 +23,4 @@ appdirs = "0.2"
 gethostname = "0.2"
 getopts = "0.2"
 
-aw_client_rust = { git = "https://github.com/ActivityWatch/aw-client-rust.git" }
+aw-client-rust = { git = "https://github.com/ActivityWatch/aw-server-rust.git" }
