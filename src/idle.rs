@@ -63,8 +63,8 @@ pub fn get_current_afk_event() -> AwEvent {
 
     AwEvent {
         id: None,
-        timestamp: timestamp.to_rfc3339(),
-        duration: 0.0,
+        timestamp: timestamp,
+        duration: Duration::milliseconds(0),
         data,
     }
 }
