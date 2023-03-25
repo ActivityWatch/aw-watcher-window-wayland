@@ -1,6 +1,8 @@
 aw-watcher-window-wayland
 =========================
 
+[![Build](https://github.com/ActivityWatch/aw-watcher-window-wayland/actions/workflows/build.yml/badge.svg)](https://github.com/ActivityWatch/aw-watcher-window-wayland/actions/workflows/build.yml)
+
 Reports both window and afk status to the buckets aw-watcher-window and aw-watcher-afk respectively
 
 **NOTE:** Does not support all wayland compositors, see "Compatibility" section below
