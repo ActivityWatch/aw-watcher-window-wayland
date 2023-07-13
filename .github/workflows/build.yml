@@ -16,6 +16,12 @@ jobs:
     steps:
     - uses: actions/checkout@v3
     - name: Build
-      run: cargo build --verbose
+      run: cargo build --verbose --release
     - name: Run tests
       run: cargo run --bin aw-watcher-window-wayland -- --help
+    - name: upload artifacts
+      uses: actions/upload-artifact@v3
+      with:
+        name: aw-watcher-window-wayland
+        path: target/release/aw-watcher-window-wayland
+        if-no-files-found: error

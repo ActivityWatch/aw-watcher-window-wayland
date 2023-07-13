@@ -24,3 +24,9 @@ gethostname = "0.2"
 getopts = "0.2"
 
 aw-client-rust = { git = "https://github.com/ActivityWatch/aw-server-rust.git" }
+
+[profile.release]
+opt-level = 3
+lto = true
+strip = true
+codegen-units = 1
