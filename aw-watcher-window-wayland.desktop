@@ -1,7 +1,7 @@
 [Desktop Entry]
 Type=Application
 Name=ActivityWatch Window Watcher
-Exec=bash -c 'logdir=~/.cache/activitywatch/log/aw-watcher-window-wayland; mkdir -p $logdir; RUST_BACKTRACE=1 aw-watcher-window-wayland > $logdir/$(date -Iseconds).log 2>&1'
+Exec=bash -c 'logdir="${XDG_CACHE_HOME:-$HOME/.cache}/activitywatch/log/aw-watcher-window-wayland" && mkdir -p "$logdir" && RUST_BACKTRACE=1 aw-watcher-window-wayland > "$logdir/$(date -Iseconds).log" 2>&1'
 Icon=
 Comment=
 X-GNOME-Autostart-enabled=true
