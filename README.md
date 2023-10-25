@@ -38,4 +38,4 @@ Only supports wayland window managers that implements the following wayland prot
 | [sway](https://swaywm.org/) | ✔️  | works on version 1.5 and up |
 | GNOME / [Mutter](https://gitlab.gnome.org/GNOME/mutter) | ❌ | no support for the protocols above |
 | [Wayfire](https://wayfire.org/) | | not tested, but might work |
-| KDE / [KWin](https://invent.kde.org/plasma/kwin) | |  |
+| KDE / [KWin](https://invent.kde.org/plasma/kwin) | ❌ |  |
