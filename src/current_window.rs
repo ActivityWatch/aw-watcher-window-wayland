@@ -1,11 +1,10 @@
 use std::collections::HashMap;
-use wayland_client::Main;
-use std::sync::Mutex;
+use wayland_client::{Connection, globals::{registry_queue_init, GlobalListContents}, Proxy, protocol::wl_registry::WlRegistry, event_created_child, EventQueue};
+use wayland_backend::rs::client::ObjectId;
 
-use super::wl_client as wl_client;
-
-use wl_client::toplevel_management::zwlr_foreign_toplevel_manager_v1::ZwlrForeignToplevelManagerV1 as ToplevelManager;
-use wl_client::toplevel_management::zwlr_foreign_toplevel_handle_v1::ZwlrForeignToplevelHandleV1 as ToplevelHandle;
+use wayland_protocols_wlr::foreign_toplevel::v1::client::{zwlr_foreign_toplevel_manager_v1::{
+    ZwlrForeignToplevelManagerV1, EVT_TOPLEVEL_OPCODE, Event as ToplevelManagerEvent
+}, zwlr_foreign_toplevel_handle_v1::{ZwlrForeignToplevelHandleV1, Event as TopLevelHandleEvent, State as TopLevelHandleState}};
 
 #[derive(Clone)]
 pub struct Window {
@@ -14,98 +13,109 @@ pub struct Window {
 }
 
 pub struct WindowState {
-    pub current_window: Option<u32>,
-    pub all_windows: HashMap::<u32, Window>,
+    pub current_window: Option<ObjectId>,
+    pub all_windows: HashMap::<ObjectId, Window>,
 }
 
-lazy_static! {
-    static ref WINDOW_STATE_LOCKED: Mutex<WindowState> = Mutex::new(WindowState {
-        current_window: None,
-        all_windows: HashMap::new(),
-    });
-}
-
-pub fn get_focused_window() -> Option<Window> {
-    let window_state = WINDOW_STATE_LOCKED.lock()
-        .expect("Unable to take lock");
-    let current_window_id = match window_state.current_window {
-        Some(id) => id,
-        None => {
-            println!("No focused window");
-            return None;
+impl WindowState {
+    pub fn get_focused_window(&self) -> Option<Window> {
+        let current_window_id = match &self.current_window {
+            Some(id) => id,
+            None => {
+                println!("No focused window");
+                return None;
+            }
+        };
+        match self.all_windows.get(&current_window_id) {
+            Some(window_ref) => Some(window_ref.clone()),
+            None => None
         }
-    };
-    match window_state.all_windows.get(&current_window_id) {
-        Some(window_ref) => Some(window_ref.clone()),
-        None => None
     }
 }
 
-fn assign_toplevel_handle(toplevel_handle: &wayland_client::Main<ToplevelHandle>) -> () {
-    use wl_client::toplevel_management::zwlr_foreign_toplevel_handle_v1::Event as HandleEvent;
-
-    toplevel_handle
-        .assign_mono(|toplevel_handle : Main<ToplevelHandle>, event| {
-            let mut window_state = WINDOW_STATE_LOCKED.lock()
-                .expect("Unable to take lock!");
-            let id = toplevel_handle.as_ref().id();
-            match event {
-                HandleEvent::AppId{ app_id } => {
-                    //println!("appid: {}", app_id);
-                    let window = window_state.all_windows.get_mut(&id)
-                        .expect("Tried to change appid on a non-existing window");
-                    window.appid = app_id.clone();
-                },
-                HandleEvent::Title{ title } => {
-                    //println!("title: {}", title);
-                    let window = window_state.all_windows.get_mut(&id)
-                        .expect("Tried to change title on a non-existing window");
-                    window.title = title.clone();
-                },
-                HandleEvent::State{ state } => {
-                    // TODO: Remove this clone
-                    for field in state {
-                        if field == 2 { // 2 == focused
-                            window_state.current_window = Some(id);
-                            break;
-                        }
-                    }
-                }
-                HandleEvent::Done => (),//println!("done"),
-                HandleEvent::Closed => {
-                    let closed_window = window_state.all_windows.remove(&id)
-                        .expect("Tried to remove window which does not exist");
-                    println!("closed {}", closed_window.appid)
-                },
-                _ => println!("Unknown toplevel handle event")
-            };
-        });
+impl wayland_client::Dispatch<WlRegistry, GlobalListContents> for WindowState {
+    fn event(
+            state: &mut Self,
+            proxy: &WlRegistry,
+            event: <WlRegistry as Proxy>::Event,
+            data: &GlobalListContents,
+            conn: &Connection,
+            qhandle: &wayland_client::QueueHandle<Self>,
+        ) {
+        todo!("remove this")
+    }
 }
 
-pub fn assign_toplevel_manager(globals: &wayland_client::GlobalManager) -> () {
-    use wl_client::toplevel_management::zwlr_foreign_toplevel_manager_v1::Event as ToplevelEvent;
-
-    globals
-        .instantiate_exact::<ToplevelManager>(1)
-        .expect("Wayland session does not expose a ToplevelManager object, \
-                 this window manager is most likely not supported")
-        .assign_mono(move |_toplevel_manager : Main<ToplevelManager>, event| {
-            match event {
-                ToplevelEvent::Toplevel{ toplevel: handle } => {
-                    //println!("new handle");
-                    let mut windows_state = WINDOW_STATE_LOCKED.lock()
-                        .expect("Unable to take lock!");
-                    let id = handle.as_ref().id();
-                    let window = Window {
-                        appid: "unknown".into(),
-                        title: "unknown".into(),
-                    };
-                    windows_state.all_windows.insert(id, window);
-                    assign_toplevel_handle(&handle);
+impl wayland_client::Dispatch<ZwlrForeignToplevelHandleV1, ()> for WindowState {
+    fn event(
+            state: &mut Self,
+            proxy: &ZwlrForeignToplevelHandleV1,
+            event: <ZwlrForeignToplevelHandleV1 as Proxy>::Event,
+            data: &(),
+            conn: &Connection,
+            qhandle: &wayland_client::QueueHandle<Self>,
+        ) {
+            let id = proxy.id();
+            let window = state.all_windows.get_mut(&id)
+                    .expect("Tried to change appid on a non-existing window");
+        match event {
+            TopLevelHandleEvent::AppId { app_id } => window.appid = app_id,
+            TopLevelHandleEvent::Title { title } => window.title = title,
+            TopLevelHandleEvent::State { state: event_state } => {
+                if event_state.contains(&(TopLevelHandleState::Activated as u8)) {
+                    state.current_window = Some(id);
                 }
-                // TODO: What do do at finish?
-                ToplevelEvent::Finished => println!("Finished?"),
-                _ => panic!("Got an unexpected event!")
-            }
-        });
+            },
+            TopLevelHandleEvent::Done => (), // TODO: do something here?
+            TopLevelHandleEvent::Closed => {
+                let closed_window = state.all_windows.remove(&id).unwrap();
+                println!("closed {}", closed_window.appid);
+            },
+            _ => println!("Unknown toplevel handle event")
+        }
+    }
+}
+
+impl wayland_client::Dispatch<ZwlrForeignToplevelManagerV1, ()> for WindowState {
+    fn event(
+            state: &mut Self,
+            proxy: &ZwlrForeignToplevelManagerV1,
+            event: <ZwlrForeignToplevelManagerV1 as Proxy>::Event,
+            data: &(),
+            conn: &Connection,
+            qhandle: &wayland_client::QueueHandle<Self>,
+        ) {
+        match event {
+            ToplevelManagerEvent::Toplevel { toplevel: handle } => {
+                let id = handle.id();
+                let window = Window {
+                    appid: "unknown".into(),
+                    title: "unknown".into(),
+                };
+                state.all_windows.insert(id, window);
+            },
+            // TODO: What do do at finish?
+            ToplevelManagerEvent::Finished =>println!("Finished?"),
+            _ => println!("Unknown toplevel handle event")
+        }
+    }
+
+    event_created_child!(WindowState, ZwlrForeignToplevelManagerV1, [
+        EVT_TOPLEVEL_OPCODE => (ZwlrForeignToplevelHandleV1, ()),
+    ]);
+}
+
+pub fn init_toplevel_manager(conn: &Connection) -> anyhow::Result<(WindowState, EventQueue<WindowState>)> {
+    let (globals, mut queue) = registry_queue_init(&conn)?;
+    let toplevel_manager: ZwlrForeignToplevelManagerV1 = globals
+        .bind(&queue.handle(), 1..=ZwlrForeignToplevelManagerV1::interface().version, ())?;
+
+        let mut window_state = WindowState {
+            current_window: None,
+            all_windows: HashMap::new(),
+        };
+
+    queue.roundtrip(&mut window_state)?;
+    
+    Ok((window_state, queue))
 }
