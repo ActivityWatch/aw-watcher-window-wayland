@@ -4,9 +4,6 @@ version = "0.1.0"
 authors = ["Johan Bjäreholt <johan@bjareho.lt>"]
 edition = "2021"
 
-[build-dependencies]
-wayland-scanner = "0.31"
-
 [dependencies]
 wayland-client = "0.31"
 wayland-sys = "0.31"

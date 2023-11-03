@@ -98,7 +98,6 @@ dependencies = [
  "wayland-client",
  "wayland-protocols-plasma",
  "wayland-protocols-wlr",
- "wayland-scanner",
  "wayland-sys",
 ]
 
