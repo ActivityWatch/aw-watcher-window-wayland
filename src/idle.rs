@@ -9,7 +9,7 @@ use aw_client_rust::Event as AwEvent;
 use wayland_client::globals::GlobalListContents;
 use wayland_client::protocol::wl_registry::WlRegistry;
 use wayland_client::protocol::wl_seat::WlSeat;
-use wayland_client::Proxy;
+use wayland_client::{Proxy, delegate_dispatch};
 
 use wayland_client::{delegate_noop, globals::registry_queue_init, Connection, EventQueue};
 use wayland_protocols_plasma::idle::client::org_kde_kwin_idle_timeout::Event as OrgKdeKwinIdleTimeoutEvent;
@@ -79,18 +79,7 @@ impl wayland_client::Dispatch<OrgKdeKwinIdleTimeout, ()> for AfkState {
     }
 }
 
-impl wayland_client::Dispatch<WlRegistry, GlobalListContents> for AfkState {
-    fn event(
-        _state: &mut Self,
-        _proxy: &WlRegistry,
-        _event: <WlRegistry as Proxy>::Event,
-        _data: &GlobalListContents,
-        _conn: &Connection,
-        _qhandle: &wayland_client::QueueHandle<Self>,
-    ) {
-        todo!("remove this")
-    }
-}
+delegate_dispatch!(AfkState: [WlRegistry: GlobalListContents] => crate::utils::RegistryState);
 
 pub fn init_afk_state(
     conn: &Connection,

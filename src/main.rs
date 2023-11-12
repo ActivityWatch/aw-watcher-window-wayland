@@ -1,6 +1,7 @@
 mod current_window;
 mod idle;
 mod singleinstance;
+mod utils;
 
 use std::io::ErrorKind;
 use std::sync::{Arc, Mutex};

@@ -4,7 +4,7 @@ use wayland_client::{
     event_created_child,
     globals::{registry_queue_init, GlobalListContents},
     protocol::wl_registry::WlRegistry,
-    Connection, EventQueue, Proxy,
+    Connection, EventQueue, Proxy, delegate_dispatch,
 };
 
 use wayland_protocols_wlr::foreign_toplevel::v1::client::{
@@ -40,18 +40,7 @@ impl WindowState {
     }
 }
 
-impl wayland_client::Dispatch<WlRegistry, GlobalListContents> for WindowState {
-    fn event(
-        _state: &mut Self,
-        _proxy: &WlRegistry,
-        _event: <WlRegistry as Proxy>::Event,
-        _data: &GlobalListContents,
-        _conn: &Connection,
-        _qhandle: &wayland_client::QueueHandle<Self>,
-    ) {
-        todo!("remove this")
-    }
-}
+delegate_dispatch!(WindowState: [WlRegistry: GlobalListContents] => crate::utils::RegistryState);
 
 impl wayland_client::Dispatch<ZwlrForeignToplevelHandleV1, ()> for WindowState {
     fn event(
