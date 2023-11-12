@@ -1,42 +1,18 @@
-// The generated code will import stuff from wayland_sys
-extern crate wayland_sys;
-extern crate wayland_client;
-extern crate aw_client_rust;
-extern crate chrono;
-extern crate gethostname;
-extern crate getopts;
-
-#[macro_use] extern crate lazy_static;
-
-#[macro_use] extern crate smallvec;
-
-mod wl_client;
 mod current_window;
 mod idle;
 mod singleinstance;
+mod utils;
 
-use std::env;
-use std::time::Duration;
-use std::os::unix::io::AsRawFd;
+use std::io::ErrorKind;
+use std::sync::{Arc, Mutex};
+use std::time;
+use std::{env, thread};
 
-use mio::{Poll, Token, PollOpt, Ready, Events};
-use mio::unix::EventedFd;
-use timerfd::{TimerFd, TimerState, SetTimeFlags};
-
+use chrono::Utc;
 use serde_json::{Map, Value};
-use chrono::prelude::*;
 
-fn get_wl_display() -> wayland_client::Display {
-    match wayland_client::Display::connect_to_env() {
-        Ok(display) => return display,
-        Err(e) => println!("Couldn't connect to wayland display by env: {}", e)
-    };
-    match wayland_client::Display::connect_to_name("wayland-0") {
-        Ok(display) => return display,
-        Err(e) => println!("Couldn't connect to wayland display by name 'wayland-0': {}", e)
-    }
-    panic!("Failed to connect to wayland display");
-}
+use wayland_backend::client::WaylandError;
+use wayland_client::Connection;
 
 fn window_to_event(window: &current_window::Window) -> aw_client_rust::Event {
     let mut data = Map::new();
@@ -46,16 +22,12 @@ fn window_to_event(window: &current_window::Window) -> aw_client_rust::Event {
         id: None,
         timestamp: Utc::now(),
         duration: chrono::Duration::milliseconds(0),
-        data: data,
+        data,
     }
 }
 
-// Setup some tokens to allow us to identify which event is for which socket.
-const STATE_CHANGE: Token = Token(0);
-const TIMER: Token = Token(1);
-
-static HEARTBEAT_INTERVAL_MS : u32 = 5000;
-static HEARTBEAT_INTERVAL_MARGIN_S : f64 = (HEARTBEAT_INTERVAL_MS + 1000) as f64 / 1000.0;
+static HEARTBEAT_INTERVAL_MS: u64 = 5000;
+static HEARTBEAT_INTERVAL_MARGIN_S: f64 = (HEARTBEAT_INTERVAL_MS + 1000) as f64 / 1000.0;
 
 fn main() {
     let args: Vec<String> = env::args().collect();
@@ -78,127 +50,120 @@ fn main() {
         testing = true;
     }
 
-    println!("### Setting up display");
-    let display = get_wl_display();
-    let mut event_queue = display.create_event_queue();
-    let attached_display = (*display).clone().attach(event_queue.get_token());
-
-    println!("### Fetching wayland globals");
-    let globals = wayland_client::GlobalManager::new(&attached_display);
-    event_queue.sync_roundtrip(|_, _| unreachable!())
-        .expect("Failed to sync_roundtrip when fetching globals");
+    println!("### Connecting to wayland server");
+    let conn = Connection::connect_to_env().unwrap();
 
     println!("### Setting up toplevel manager");
-    current_window::assign_toplevel_manager(&globals);
+    let (window_state, mut window_queue) = current_window::init_toplevel_manager(&conn).unwrap();
+    let shared_window_state = Arc::new(Mutex::new(window_state));
 
     println!("### Setting up idle timeout");
-    idle::assign_idle_timeout(&globals, 120000);
+    let (afk_state, mut afk_queue) = idle::init_afk_state(&conn, 120000).unwrap();
+    let shared_afk_state = Arc::new(Mutex::new(afk_state));
 
-    println!("### Syncing roundtrip");
-    event_queue
-        .sync_roundtrip(|_, _| { /* we ignore unfiltered messages */ })
-        .expect("event_queue sync_roundtrip failure");
+    {
+        let shared_window_state = shared_window_state.clone();
+        let shared_afk_state = shared_afk_state.clone();
 
-    println!("### Preparing poll fds");
-    let poll = Poll::new()
-        .expect("Failed to create poll fds");
-    let fd = event_queue.get_connection_fd();
+        // a new thread to read wayland socket and handle events
+        thread::spawn(move || {
+            let mut dispatch = || {
+                let mut window_state = shared_window_state.lock().unwrap();
+                let mut afk_state = shared_afk_state.lock().unwrap();
+                window_queue.dispatch_pending(&mut window_state).unwrap();
+                afk_queue.dispatch_pending(&mut afk_state).unwrap();
+            };
 
-    let mut timer = TimerFd::new()
-        .expect("Failed to create timer fd");
-    let timer_state = TimerState::Periodic {
-        current: Duration::from_secs(1),
-        interval: Duration::from_millis(HEARTBEAT_INTERVAL_MS as u64)
-    };
-    let timer_flags = SetTimeFlags::Default;
-    timer.set_state(timer_state, timer_flags);
+            loop {
+                match conn.prepare_read() {
+                    Some(guard) => {
+                        // mostly copied from https://github.com/Smithay/wayland-rs/blob/edd0f60d0baf09604553525c2636df5d6ba05d44/wayland-client/src/conn.rs#L219
+                        // because the method is not public...
+                        let fd = guard.connection_fd();
+                        let mut fds = [nix::poll::PollFd::new(
+                            &fd,
+                            nix::poll::PollFlags::POLLIN | nix::poll::PollFlags::POLLERR,
+                        )];
 
-    poll.register(&EventedFd(&fd), STATE_CHANGE, Ready::readable(), PollOpt::empty())
-        .expect("Failed to register state_change fd");
-    poll.register(&EventedFd(&timer.as_raw_fd()), TIMER, Ready::readable(), PollOpt::empty())
-        .expect("Failed to register timer fd");
+                        loop {
+                            match nix::poll::poll(&mut fds, -1) {
+                                Ok(_) => break,
+                                Err(nix::errno::Errno::EINTR) => continue,
+                                Err(e) => {
+                                    panic!("poll wayland socket err: {:?}", e);
+                                }
+                            }
+                        }
+
+                        // at this point the fd is ready
+                        match guard.read() {
+                            Ok(_) => dispatch(),
+                            // if we are still "wouldblock", just continue and retry.
+                            Err(WaylandError::Io(e)) if e.kind() == ErrorKind::WouldBlock => {
+                                continue
+                            }
+                            Err(e) => {
+                                panic!("read wayland socket err: {:?}", e);
+                            }
+                        };
+                    }
+                    None => dispatch(),
+                }
+            }
+        });
+    }
 
     println!("### Taking client locks");
     let host = "localhost";
     let port = match testing {
         true => "5666",
-        false => "5600"
+        false => "5600",
     };
-    let _window_lock = singleinstance::get_client_lock(&format!("aw-watcher-window-at-{}-on-{}", host, port)).unwrap();
-    let _afk_lock = singleinstance::get_client_lock(&format!("aw-watcher-afk-at-{}-on-{}", host, port)).unwrap();
+    let _window_lock =
+        singleinstance::get_client_lock(&format!("aw-watcher-window-at-{}-on-{}", host, port))
+            .unwrap();
+    let _afk_lock =
+        singleinstance::get_client_lock(&format!("aw-watcher-afk-at-{}-on-{}", host, port))
+            .unwrap();
 
     println!("### Creating aw-client");
-    let client = aw_client_rust::AwClient::new(host, port, "aw-watcher-wayland");
+    let client = aw_client_rust::blocking::AwClient::new(host, port, "aw-watcher-wayland");
     let hostname = gethostname::gethostname().into_string().unwrap();
     let window_bucket = format!("aw-watcher-window_{}", hostname);
     let afk_bucket = format!("aw-watcher-afk_{}", hostname);
-    client.create_bucket_simple(&window_bucket, "currentwindow")
+    client
+        .create_bucket_simple(&window_bucket, "currentwindow")
         .expect("Failed to create window bucket");
-    client.create_bucket_simple(&afk_bucket, "afkstatus")
+    client
+        .create_bucket_simple(&afk_bucket, "afkstatus")
         .expect("Failed to create afk bucket");
 
     println!("### Watcher is now running");
-    let mut events = Events::with_capacity(1);
-    let mut prev_window : Option<current_window::Window> = None;
     loop {
-        poll.poll(&mut events, None).expect("Failed to poll fds");
-        for event in &events {
-            match event.token() {
-                STATE_CHANGE => {
-                    //println!("state change!");
-                    event_queue
-                        .dispatch(|_, _| { /* we ignore unfiltered messages */ } )
-                        .expect("event_queue dispatch failure");
+        {
+            // need another block to drop mutex lock
+            let window_state = shared_window_state.lock().unwrap();
+            if let Some(window) = window_state.get_focused_window() {
+                let window_event = window_to_event(&window);
+                if client
+                    .heartbeat(&window_bucket, &window_event, HEARTBEAT_INTERVAL_MARGIN_S)
+                    .is_err()
+                {
+                    println!("Failed to send heartbeat");
+                    break;
+                }
+            }
 
-                    if let Some(ref prev_window) = prev_window {
-                        let window_event = window_to_event(&prev_window);
-                        if client.heartbeat(&window_bucket, &window_event, HEARTBEAT_INTERVAL_MARGIN_S).is_err() {
-                            println!("Failed to send heartbeat");
-                            break;
-                        }
-                    }
-
-                    match current_window::get_focused_window() {
-                        Some(current_window) => {
-                            let window_event = window_to_event(&current_window);
-                            if client.heartbeat(&window_bucket, &window_event, HEARTBEAT_INTERVAL_MARGIN_S).is_err() {
-                                println!("Failed to send heartbeat");
-                                break;
-                            }
-                            prev_window = Some(current_window);
-                        },
-                        None => {
-                            prev_window = None;
-                        },
-                    }
-
-                    let afk_event = idle::get_current_afk_event();
-                    if client.heartbeat(&afk_bucket, &afk_event, HEARTBEAT_INTERVAL_MARGIN_S).is_err() {
-                        println!("Failed to send heartbeat");
-                        break;
-                    }
-                },
-                TIMER => {
-                    //println!("timer!");
-                    timer.read();
-
-                    if let Some(ref prev_window) = prev_window {
-                        let window_event = window_to_event(&prev_window);
-                        if client.heartbeat(&window_bucket, &window_event, HEARTBEAT_INTERVAL_MARGIN_S).is_err() {
-                            println!("Failed to send heartbeat");
-                            break;
-                        }
-                    }
-
-                    let afk_event = idle::get_current_afk_event();
-                    if client.heartbeat(&afk_bucket, &afk_event, HEARTBEAT_INTERVAL_MARGIN_S).is_err() {
-                        println!("Failed to send heartbeat");
-                        break;
-                    }
-
-                },
-                _ => panic!("Invalid token!")
+            let afk_state = shared_afk_state.lock().unwrap();
+            let afk_event = afk_state.get_current_afk_event();
+            if client
+                .heartbeat(&afk_bucket, &afk_event, HEARTBEAT_INTERVAL_MARGIN_S)
+                .is_err()
+            {
+                println!("Failed to send heartbeat");
+                break;
             }
         }
+        thread::sleep(time::Duration::from_millis(HEARTBEAT_INTERVAL_MS));
     }
 }

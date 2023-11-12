@@ -2,28 +2,24 @@
 name = "aw-watcher-window-wayland"
 version = "0.1.0"
 authors = ["Johan Bjäreholt <johan@bjareho.lt>"]
-edition = "2018"
-build = "src/build.rs"
-
-[build-dependencies]
-wayland-scanner = "0.24"
+edition = "2021"
 
 [dependencies]
-smallvec = "0.6"
-lazy_static = "1.2"
-wayland-client = "0.24"
-wayland-commons = "0.24"
-wayland-sys = "0.24"
+wayland-client = "0.31"
+wayland-sys = "0.31"
 serde_json = "1.0"
 chrono = "0.4"
-mio = "0.6"
-timerfd = "1.0"
 file-lock = "1.1"
 appdirs = "0.2"
 gethostname = "0.2"
 getopts = "0.2"
 
 aw-client-rust = { git = "https://github.com/ActivityWatch/aw-server-rust.git" }
+wayland-protocols-plasma = { version = "0.2.0", features = ["client"] }
+wayland-protocols-wlr = { version = "0.2.0", features = ["client"] }
+wayland-backend = "0.3.2"
+anyhow = "1.0.75"
+nix = { version = "0.27.1", features = ["poll"] }
 
 [profile.release]
 opt-level = 3
