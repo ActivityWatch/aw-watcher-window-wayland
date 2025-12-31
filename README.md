@@ -28,8 +28,8 @@ If you want to autostart aw-watcher-window-wayland without aw-qt, you can use th
 
 ### Compatibility
 
-Only supports wayland window managers that implements the following wayland protocols:
-- [idle.xml](https://wayland.app/protocols/kde-idle) (many)
+Only supports wayland window managers that implement the following wayland protocols:
+- [kde-idle.xml](https://wayland.app/protocols/kde-idle) (only KDE) OR [ext-idle-notify-v1.xml](https://wayland.app/protocols/ext-idle-notify-v1) (many)
 - [wlr-foreign-toplevel-management-unstable-v1.xml](https://wayland.app/protocols/wlr-foreign-toplevel-management-unstable-v1) (very few)
 
 | Window Manager | supported? | Details |
