@@ -20,7 +20,7 @@ jobs:
     - name: Run tests
       run: cargo run --bin aw-watcher-window-wayland -- --help
     - name: upload artifacts
-      uses: actions/upload-artifact@v3
+      uses: actions/upload-artifact@v4
       with:
         name: aw-watcher-window-wayland
         path: target/release/aw-watcher-window-wayland
