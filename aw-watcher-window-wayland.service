@@ -30,12 +30,13 @@
 Description=ActivityWatch Window Watcher for Wayland
 Documentation=https://github.com/ActivityWatch/aw-watcher-window-wayland
 After=aw-server.service
-Requires=aw-server.service
+# Wants= (not Requires=) so aw-server going down doesn't stop the watcher;
+# the watcher handles aw-server outages internally via heartbeat retries.
+Wants=aw-server.service
 # Wait for aw-server to be fully ready and listening on port 5600
 After=network.target
 # Ensure we run within a graphical session that has Wayland environment
 After=graphical-session.target
-# Allow up to 60 restart attempts within a 2-hour window before giving up
 StartLimitIntervalSec=7200
 StartLimitBurst=60
 
@@ -43,10 +44,10 @@ StartLimitBurst=60
 Type=simple
 ExecStart=aw-watcher-window-wayland
 Restart=always
-# Wait 2 minutes between restart attempts so aw-server has time to come back up
-RestartSec=120
-# Ensure aw-server is actually listening before starting (timeout after 60 seconds)
-ExecStartPre=/bin/sh -c 'i=0; until nc -z localhost 5600 || [ $i -eq 60 ]; do sleep 1; i=$((i+1)); done; nc -z localhost 5600'
+RestartSec=10
+# Wait indefinitely for aw-server to be listening before starting
+ExecStartPre=/bin/sh -c 'until nc -z localhost 5600; do sleep 5; done'
+TimeoutStartSec=infinity
 # Note: WAYLAND_DISPLAY must be imported from your graphical session
 # Run: systemctl --user import-environment WAYLAND_DISPLAY
 # Add this command to your compositor/session startup script
