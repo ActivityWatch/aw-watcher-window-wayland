@@ -170,27 +170,40 @@ fn main() {
                         .dispatch(|_, _| { /* we ignore unfiltered messages */ } )
                         .expect("event_queue dispatch failure");
 
-                    if let Some(ref prev_window) = prev_window {
-                        let window_event = window_to_event(&prev_window);
-                        if client.heartbeat(&window_bucket, &window_event, HEARTBEAT_INTERVAL_MARGIN_S).is_err() {
-                            println!("Failed to send heartbeat");
-                            break;
-                        }
-                    }
-
-                    match current_window::get_focused_window() {
-                        Some(current_window) => {
-                            let window_event = window_to_event(&current_window);
+                    // Only send window heartbeats when not AFK. This prevents window
+                    // events from extending into AFK periods, which would cause a
+                    // systematic ~2-minute overlap between window events and AFK gaps
+                    // (because the not-afk AFK event timestamp is backdated by the
+                    // idle timeout while window events are not).
+                    // Fixes: https://github.com/ActivityWatch/aw-watcher-window-wayland/issues/8
+                    //        https://github.com/ActivityWatch/aw-watcher-window-wayland/issues/5
+                    if !is_idle_active || !idle::is_currently_afk() {
+                        if let Some(ref prev_window) = prev_window {
+                            let window_event = window_to_event(&prev_window);
                             if client.heartbeat(&window_bucket, &window_event, HEARTBEAT_INTERVAL_MARGIN_S).is_err() {
                                 println!("Failed to send heartbeat");
                                 break;
                             }
-                            prev_window = Some(current_window);
-                        },
-                        None => {
-                            prev_window = None;
-                        },
+                        }
+
+                        match current_window::get_focused_window() {
+                            Some(current_window) => {
+                                let window_event = window_to_event(&current_window);
+                                if client.heartbeat(&window_bucket, &window_event, HEARTBEAT_INTERVAL_MARGIN_S).is_err() {
+                                    println!("Failed to send heartbeat");
+                                    break;
+                                }
+                                prev_window = Some(current_window);
+                            },
+                            None => {
+                                prev_window = None;
+                            },
+                        }
                     }
+                    // While AFK we deliberately leave prev_window untouched: the next
+                    // not-AFK tick re-queries the focused window before sending a
+                    // heartbeat anyway, so updating it here would only buy being one
+                    // tick fresher at the cost of a Wayland round-trip every 5s while idle.
 
                     if is_idle_active {
                         let afk_event = idle::get_current_afk_event();
@@ -204,11 +217,14 @@ fn main() {
                     //println!("timer!");
                     timer.read();
 
-                    if let Some(ref prev_window) = prev_window {
-                        let window_event = window_to_event(&prev_window);
-                        if client.heartbeat(&window_bucket, &window_event, HEARTBEAT_INTERVAL_MARGIN_S).is_err() {
-                            println!("Failed to send heartbeat");
-                            break;
+                    // Only send window heartbeats when not AFK (see STATE_CHANGE comment)
+                    if !is_idle_active || !idle::is_currently_afk() {
+                        if let Some(ref prev_window) = prev_window {
+                            let window_event = window_to_event(&prev_window);
+                            if client.heartbeat(&window_bucket, &window_event, HEARTBEAT_INTERVAL_MARGIN_S).is_err() {
+                                println!("Failed to send heartbeat");
+                                break;
+                            }
                         }
                     }
 

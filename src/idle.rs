@@ -35,6 +35,10 @@ fn set_afk_state(afk: bool) {
     afk_state.state_start = Utc::now();
 }
 
+pub fn is_currently_afk() -> bool {
+    AFK_STATE_LOCKED.lock().expect("Unable to take lock").is_afk
+}
+
 pub fn get_current_afk_event() -> AwEvent {
     let afk_state = AFK_STATE_LOCKED.lock().expect("Unable to take lock");
 
