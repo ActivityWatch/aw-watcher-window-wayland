@@ -20,7 +20,7 @@ use std::time::Duration;
 use std::os::unix::io::AsRawFd;
 
 use mio::{Poll, Token, PollOpt, Ready, Events};
-use mio::unix::EventedFd;
+use mio::unix::{EventedFd, UnixReady};
 use timerfd::{TimerFd, TimerState, SetTimeFlags};
 
 use serde_json::{Map, Value};
@@ -166,6 +166,17 @@ fn main() {
             match event.token() {
                 STATE_CHANGE => {
                     //println!("state change!");
+                    // If the compositor died, the connection fd is hung up. Exit
+                    // so systemd can restart us against the new compositor.
+                    // Calling dispatch() on a dead connection must be avoided: it
+                    // busy-loops forever inside wayland-client 0.24, whose flush()
+                    // retry loop never breaks out on EPIPE.
+                    // Fixes: https://github.com/ActivityWatch/aw-watcher-window-wayland/issues/9
+                    let readiness = UnixReady::from(event.readiness());
+                    if readiness.is_hup() || readiness.is_error() {
+                        eprintln!("Lost connection to the Wayland compositor, exiting");
+                        std::process::exit(1);
+                    }
                     event_queue
                         .dispatch(|_, _| { /* we ignore unfiltered messages */ } )
                         .expect("event_queue dispatch failure");
