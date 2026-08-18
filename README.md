@@ -42,3 +42,4 @@ Window tracking uses wlr-foreign-toplevel-management when available, falling bac
 | GNOME / [Mutter](https://gitlab.gnome.org/GNOME/mutter) | ❌ | no support for the protocols above |
 | [Wayfire](https://wayfire.org/) | | not tested, but might work |
 | KDE / [KWin](https://invent.kde.org/plasma/kwin) | ❌ |  |
+| [niri](https://github.com/niri-wm/niri) | ✔️ | works |
