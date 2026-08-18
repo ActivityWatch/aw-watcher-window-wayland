@@ -13,6 +13,8 @@ fn main() {
          "./src/protocols/idle.rs"),
         ("./protocols/ext-idle-notify-v1.xml",
          "./src/protocols/ext-idle-notify-v1.rs"),
+        ("./protocols/cosmic-toplevel-info-unstable-v1.xml",
+         "./src/protocols/cosmic-toplevel-info.rs"),
     );
 
     // Create "./src/protocols" folder for generated bindings

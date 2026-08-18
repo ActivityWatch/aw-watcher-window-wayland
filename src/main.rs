@@ -89,7 +89,20 @@ fn main() {
         .expect("Failed to sync_roundtrip when fetching globals");
 
     println!("### Setting up toplevel manager");
-    current_window::assign_toplevel_manager(&globals);
+    match current_window::assign_toplevel_manager(&globals) {
+        Ok(_) => println!("Using wlr-foreign-toplevel-management"),
+        Err(err_str) => {
+            eprintln!("{}", err_str);
+            match current_window::assign_cosmic_toplevel_manager(&globals) {
+                Ok(_) => println!("Using zcosmic_toplevel_info_v1"),
+                Err(err_str) => {
+                    eprintln!("{}", err_str);
+                    panic!("Wayland session does not expose any toplevel management protocol, \
+                            this window manager is most likely not supported");
+                }
+            }
+        }
+    }
 
     println!("### Setting up idle timeout");
     let mut is_idle_active = match idle::assign_ext_idle_notify(&globals, 120000) {

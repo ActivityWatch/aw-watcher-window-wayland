@@ -1,0 +1,136 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<protocol name="cosmic_toplevel_info_unstable_v1">
+  <copyright>
+    Copyright © 2018 Ilia Bozhinov
+    Copyright © 2020 Isaac Freund
+    Copyright © 2024 Victoria Brekenfeld
+    Permission to use, copy, modify, distribute, and sell this software
+    and its documentation for any purpose is hereby granted without fee.
+  </copyright>
+
+  <!-- Stub interfaces referenced by events but defined in other protocols -->
+  <interface name="zcosmic_workspace_handle_v1" version="1">
+    <description summary="stub for workspace handle"/>
+  </interface>
+
+  <interface name="ext_foreign_toplevel_handle_v1" version="1">
+    <description summary="stub for ext foreign toplevel handle"/>
+  </interface>
+
+  <interface name="ext_workspace_handle_v1" version="1">
+    <description summary="stub for ext workspace handle"/>
+  </interface>
+
+  <interface name="zcosmic_toplevel_info_v1" version="3">
+    <description summary="list toplevels and properties thereof">
+      The purpose of this protocol is to enable clients such as taskbars
+      or docks to access a list of opened applications and basic properties
+      thereof.
+    </description>
+
+    <event name="toplevel" deprecated-since="2">
+      <description summary="a toplevel has been created"/>
+      <arg name="toplevel" type="new_id" interface="zcosmic_toplevel_handle_v1"/>
+    </event>
+
+    <request name="stop" deprecated-since="2">
+      <description summary="stop sending events"/>
+    </request>
+
+    <event name="finished" deprecated-since="2">
+      <description summary="the compositor has finished with the toplevel manager"/>
+    </event>
+
+    <request name="get_cosmic_toplevel" since="2">
+      <description summary="get cosmic toplevel extension object"/>
+      <arg name="cosmic_toplevel" type="new_id" interface="zcosmic_toplevel_handle_v1"/>
+      <arg name="foreign_toplevel" type="object" interface="ext_foreign_toplevel_handle_v1"/>
+    </request>
+
+    <event name="done" since="2">
+      <description summary="all information about active toplevels have been sent"/>
+    </event>
+  </interface>
+
+  <interface name="zcosmic_toplevel_handle_v1" version="3">
+    <description summary="an open toplevel">
+      A zcosmic_toplevel_handle_v1 object represents an open toplevel window.
+    </description>
+
+    <request name="destroy" type="destructor">
+      <description summary="destroy the zcosmic_toplevel_handle_v1 object"/>
+    </request>
+
+    <!-- Event opcodes must match compositor exactly -->
+    <event name="closed" deprecated-since="2">
+      <description summary="the toplevel has been closed"/>
+    </event>
+
+    <event name="done" deprecated-since="2">
+      <description summary="all information about the toplevel has been sent"/>
+    </event>
+
+    <event name="title" deprecated-since="2">
+      <description summary="title change"/>
+      <arg name="title" type="string"/>
+    </event>
+
+    <event name="app_id" deprecated-since="2">
+      <description summary="app_id change"/>
+      <arg name="app_id" type="string"/>
+    </event>
+
+    <event name="output_enter">
+      <description summary="toplevel entered an output"/>
+      <arg name="output" type="object" interface="wl_output"/>
+    </event>
+
+    <event name="output_leave">
+      <description summary="toplevel left an output"/>
+      <arg name="output" type="object" interface="wl_output"/>
+    </event>
+
+    <event name="workspace_enter" deprecated-since="3">
+      <description summary="toplevel entered a workspace"/>
+      <arg name="workspace" type="object" interface="zcosmic_workspace_handle_v1"/>
+    </event>
+
+    <event name="workspace_leave" deprecated-since="3">
+      <description summary="toplevel left a workspace"/>
+      <arg name="workspace" type="object" interface="zcosmic_workspace_handle_v1"/>
+    </event>
+
+    <enum name="state">
+      <description summary="types of states on the toplevel"/>
+      <entry name="maximized"  value="0" summary="the toplevel is maximized"/>
+      <entry name="minimized"  value="1" summary="the toplevel is minimized"/>
+      <entry name="activated"  value="2" summary="the toplevel is active"/>
+      <entry name="fullscreen" value="3" summary="the toplevel is fullscreen"/>
+      <entry name="sticky"     value="4" summary="the toplevel is sticky" since="2"/>
+    </enum>
+
+    <event name="state">
+      <description summary="the toplevel state changed"/>
+      <arg name="state" type="array"/>
+    </event>
+
+    <event name="geometry" since="2">
+      <description summary="the toplevel geometry changed"/>
+      <arg name="output" type="object" interface="wl_output"/>
+      <arg name="x" type="int"/>
+      <arg name="y" type="int"/>
+      <arg name="width" type="int"/>
+      <arg name="height" type="int"/>
+    </event>
+
+    <event name="ext_workspace_enter" since="3">
+      <description summary="toplevel entered a workspace"/>
+      <arg name="workspace" type="object" interface="ext_workspace_handle_v1"/>
+    </event>
+
+    <event name="ext_workspace_leave" since="3">
+      <description summary="toplevel left a workspace"/>
+      <arg name="workspace" type="object" interface="ext_workspace_handle_v1"/>
+    </event>
+  </interface>
+</protocol>

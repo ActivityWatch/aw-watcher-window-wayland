@@ -45,3 +45,15 @@ pub mod ext_idle {
 
     include!("protocols/ext-idle-notify-v1.rs");
 }
+
+pub mod cosmic_toplevel {
+    pub(crate) use smallvec;
+    pub(crate) use wayland_sys as sys;
+    pub(crate) use wayland_client::{AnonymousObject, Interface, Main, Proxy, ProxyMap};
+    pub(crate) use wayland_client::protocol::{wl_surface, wl_region, wl_seat, wl_output};
+    pub(crate) use wayland_commons::{MessageGroup};
+    pub(crate) use wayland_commons::map::{Object, ObjectMetadata};
+    pub(crate) use wayland_commons::wire::{Argument, ArgumentType, Message, MessageDesc};
+
+    include!("protocols/cosmic-toplevel-info.rs");
+}

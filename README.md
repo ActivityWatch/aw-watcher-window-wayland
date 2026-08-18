@@ -30,12 +30,15 @@ If you want to autostart aw-watcher-window-wayland without aw-qt, you can use th
 
 Only supports wayland window managers that implement the following wayland protocols:
 - [kde-idle.xml](https://wayland.app/protocols/kde-idle) (only KDE) OR [ext-idle-notify-v1.xml](https://wayland.app/protocols/ext-idle-notify-v1) (many)
-- [wlr-foreign-toplevel-management-unstable-v1.xml](https://wayland.app/protocols/wlr-foreign-toplevel-management-unstable-v1) (very few)
+- [wlr-foreign-toplevel-management-unstable-v1.xml](https://wayland.app/protocols/wlr-foreign-toplevel-management-unstable-v1) (very few) OR [zcosmic-toplevel-info-v1](https://github.com/pop-os/cosmic-protocols) (COSMIC)
+
+Window tracking uses wlr-foreign-toplevel-management when available, falling back to zcosmic_toplevel_info_v1 on COSMIC desktop.
 
 | Window Manager | supported? | Details |
 |-----|-----|-----|
 | [phosh](https://gitlab.gnome.org/World/Phosh/phosh) | ✔️  | works |
 | [sway](https://swaywm.org/) | ✔️  | works on version 1.5 and up |
+| [COSMIC](https://system76.com/cosmic/) | ✔️  | works via zcosmic_toplevel_info_v1 fallback |
 | GNOME / [Mutter](https://gitlab.gnome.org/GNOME/mutter) | ❌ | no support for the protocols above |
 | [Wayfire](https://wayfire.org/) | | not tested, but might work |
 | KDE / [KWin](https://invent.kde.org/plasma/kwin) | ❌ |  |

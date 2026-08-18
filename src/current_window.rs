@@ -7,6 +7,9 @@ use super::wl_client as wl_client;
 use wl_client::toplevel_management::zwlr_foreign_toplevel_manager_v1::ZwlrForeignToplevelManagerV1 as ToplevelManager;
 use wl_client::toplevel_management::zwlr_foreign_toplevel_handle_v1::ZwlrForeignToplevelHandleV1 as ToplevelHandle;
 
+use wl_client::cosmic_toplevel::zcosmic_toplevel_info_v1::ZcosmicToplevelInfoV1 as CosmicToplevelManager;
+use wl_client::cosmic_toplevel::zcosmic_toplevel_handle_v1::ZcosmicToplevelHandleV1 as CosmicToplevelHandle;
+
 #[derive(Clone)]
 pub struct Window {
     pub title: String,
@@ -82,13 +85,14 @@ fn assign_toplevel_handle(toplevel_handle: &wayland_client::Main<ToplevelHandle>
         });
 }
 
-pub fn assign_toplevel_manager(globals: &wayland_client::GlobalManager) -> () {
+pub fn assign_toplevel_manager(globals: &wayland_client::GlobalManager) -> Result<(), String> {
     use wl_client::toplevel_management::zwlr_foreign_toplevel_manager_v1::Event as ToplevelEvent;
 
     globals
         .instantiate_exact::<ToplevelManager>(1)
-        .expect("Wayland session does not expose a ToplevelManager object, \
-                 this window manager is most likely not supported")
+        .map_err(|_|
+            String::from("Wayland session does not expose a wlr ToplevelManager object")
+        )?
         .assign_mono(move |_toplevel_manager : Main<ToplevelManager>, event| {
             match event {
                 ToplevelEvent::Toplevel{ toplevel: handle } => {
@@ -108,4 +112,72 @@ pub fn assign_toplevel_manager(globals: &wayland_client::GlobalManager) -> () {
                 _ => panic!("Got an unexpected event!")
             }
         });
+    Ok(())
+}
+
+fn assign_cosmic_toplevel_handle(toplevel_handle: &wayland_client::Main<CosmicToplevelHandle>) -> () {
+    use wl_client::cosmic_toplevel::zcosmic_toplevel_handle_v1::Event as HandleEvent;
+
+    toplevel_handle
+        .assign_mono(|toplevel_handle : Main<CosmicToplevelHandle>, event| {
+            let mut window_state = WINDOW_STATE_LOCKED.lock()
+                .expect("Unable to take lock!");
+            let id = toplevel_handle.as_ref().id();
+            match event {
+                HandleEvent::AppId{ app_id } => {
+                    let window = window_state.all_windows.get_mut(&id)
+                        .expect("Tried to change appid on a non-existing window");
+                    window.appid = app_id.clone();
+                },
+                HandleEvent::Title{ title } => {
+                    let window = window_state.all_windows.get_mut(&id)
+                        .expect("Tried to change title on a non-existing window");
+                    window.title = title.clone();
+                },
+                HandleEvent::State{ state } => {
+                    for chunk in state.chunks_exact(4) {
+                        let val = u32::from_ne_bytes([chunk[0], chunk[1], chunk[2], chunk[3]]);
+                        if val == 2 { // 2 == activated
+                            window_state.current_window = Some(id);
+                            break;
+                        }
+                    }
+                }
+                HandleEvent::Done => (),
+                HandleEvent::Closed => {
+                    let closed_window = window_state.all_windows.remove(&id)
+                        .expect("Tried to remove window which does not exist");
+                    println!("closed {}", closed_window.appid)
+                },
+                _ => () // Ignore output_enter, output_leave, workspace events
+            };
+        });
+}
+
+pub fn assign_cosmic_toplevel_manager(globals: &wayland_client::GlobalManager) -> Result<(), String> {
+    use wl_client::cosmic_toplevel::zcosmic_toplevel_info_v1::Event as CosmicToplevelEvent;
+
+    globals
+        .instantiate_exact::<CosmicToplevelManager>(1)
+        .map_err(|_|
+            String::from("Wayland session does not expose a zcosmic_toplevel_info_v1 object")
+        )?
+        .assign_mono(move |_toplevel_manager : Main<CosmicToplevelManager>, event| {
+            match event {
+                CosmicToplevelEvent::Toplevel{ toplevel: handle } => {
+                    let mut windows_state = WINDOW_STATE_LOCKED.lock()
+                        .expect("Unable to take lock!");
+                    let id = handle.as_ref().id();
+                    let window = Window {
+                        appid: "unknown".into(),
+                        title: "unknown".into(),
+                    };
+                    windows_state.all_windows.insert(id, window);
+                    assign_cosmic_toplevel_handle(&handle);
+                }
+                CosmicToplevelEvent::Finished => println!("COSMIC toplevel manager finished"),
+                _ => ()
+            }
+        });
+    Ok(())
 }
