@@ -1,9 +1,10 @@
-.PHONY: all build install clean enable-service disable-service setup-wayland help
+.PHONY: all build test install clean enable-service disable-service setup-wayland help
 
 help:
 	@echo "Available targets:"
 	@echo "  all             - Build the project (default)"
 	@echo "  build           - Build the project with cargo"
+	@echo "  test            - Run the systemd unit tests"
 	@echo "  install         - Install binary and systemd service"
 	@echo "  clean           - Remove build artifacts"
 	@echo "  enable-service  - Enable and start the systemd service"
@@ -32,6 +33,11 @@ all: build
 build:
 	cargo build $(CARGO_FLAGS)
 
+# A test exits 77 when its prerequisites are missing (here: python3). make
+# aborts a recipe on any non-zero status, so map that back to success.
+test:
+	./tests/wait_for_wayland_test.sh || [ $$? -eq 77 ]
+
 install: build
 	# Install aw-watcher-window-wayland executable
 	mkdir -p $(DESTDIR)$(PREFIX)/bin/
@@ -50,17 +56,22 @@ endif
 clean:
 	cargo clean
 
+# --no-block on start/restart: the unit waits for aw-server and for a Wayland
+# compositor, so a plain start blocks until both exist. That matters most for
+# setup-wayland below, which depends on this target and exists to write the
+# import-environment line the service is waiting for. Expect the status output
+# to read "activating (start-pre)" when run before the compositor is up.
 enable-service:
 	@echo "Enabling and starting service..."
 ifeq ($(SUDO_USER),)
 	systemctl --user enable aw-watcher-window-wayland
-	systemctl --user start aw-watcher-window-wayland
+	systemctl --user start --no-block aw-watcher-window-wayland
 	@echo "Service status:"
 	@systemctl --user status aw-watcher-window-wayland --no-pager
 else
 	@echo "Note: For user service, run without sudo"
 	systemctl --user enable aw-watcher-window-wayland
-	systemctl --user start aw-watcher-window-wayland
+	systemctl --user start --no-block aw-watcher-window-wayland
 endif
 
 disable-service:
@@ -108,7 +119,7 @@ setup-wayland: enable-service
 	fi
 	@echo ""
 	@echo "Restarting service to pick up environment changes..."
-	@systemctl --user restart aw-watcher-window-wayland 2>/dev/null || echo "Note: Service restart will happen after compositor reload"
+	@systemctl --user restart --no-block aw-watcher-window-wayland 2>/dev/null || echo "Note: Service restart will happen after compositor reload"
 	@echo ""
 	@echo "⚠ IMPORTANT: The environment variable will only be available after:"
 	@echo "  1. Reloading your compositor config, OR"

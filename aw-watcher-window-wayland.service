@@ -23,7 +23,17 @@
 # For system-wide installation (not recommended for user services):
 #    sudo make install
 #
-# The watcher will automatically start when aw-server is ready and listening on port 5600.
+# The watcher waits for two things before it starts:
+#   1. aw-server listening on port 5600
+#   2. a usable Wayland compositor -- WAYLAND_DISPLAY imported into the systemd
+#      user environment (installation step 2 above) AND the socket it names
+#      existing
+#
+# Both waits are unbounded (TimeoutStartSec=infinity), so on a machine where the
+# compositor is started manually the unit simply sits in "activating (start-pre)"
+# until you start it, instead of failing. That also means an interactive
+# "systemctl --user start" blocks until the compositor is up; use --no-block if
+# you do not want to wait.
 #
 
 [Unit]
@@ -35,7 +45,10 @@ After=aw-server.service
 Wants=aw-server.service
 # Wait for aw-server to be fully ready and listening on port 5600
 After=network.target
-# Ensure we run within a graphical session that has Wayland environment
+# Advisory only: After= orders against graphical-session.target just for
+# compositors that actually activate it. Many (e.g. a hand-started sway) never
+# do, leaving the target inactive and this line a no-op -- which is why the
+# compositor wait below, not this ordering, is what makes startup reliable.
 After=graphical-session.target
 StartLimitIntervalSec=7200
 StartLimitBurst=60
@@ -47,10 +60,17 @@ Restart=always
 RestartSec=10
 # Wait indefinitely for aw-server to be listening before starting
 ExecStartPre=/bin/sh -c 'until nc -z localhost 5600; do sleep 5; done'
+# Wait indefinitely for a compositor. Checking the socket alone would race: a
+# compositor creates its socket and only then imports WAYLAND_DISPLAY, and
+# starting in that window leaves the watcher unable to find the display.
+ExecStartPre=/bin/sh -c 'until wd=$$(systemctl --user show-environment | sed -n "s/^WAYLAND_DISPLAY=//p"); [ -n "$$wd" ] && { [ -S "$$wd" ] || [ -S "$$XDG_RUNTIME_DIR/$$wd" ]; }; do sleep 5; done'
 TimeoutStartSec=infinity
-# Note: WAYLAND_DISPLAY must be imported from your graphical session
+# Note: WAYLAND_DISPLAY must be imported from your graphical session -- the
+# second ExecStartPre above waits for exactly that, so without it the unit
+# stays in start-pre forever rather than starting and failing.
 # Run: systemctl --user import-environment WAYLAND_DISPLAY
-# Add this command to your compositor/session startup script
+# Add this command to your compositor/session startup script (make setup-wayland
+# does it for sway and Hyprland)
 
 [Install]
 WantedBy=default.target
