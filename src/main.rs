@@ -54,6 +54,56 @@ fn window_to_event(window: &current_window::Window) -> aw_client_rust::Event {
 const STATE_CHANGE: Token = Token(0);
 const TIMER: Token = Token(1);
 
+// Startup: how long to wait for aw-server before giving up (aw-qt may start us first).
+const SERVER_WAIT_MAX: Duration = Duration::from_secs(60);
+const SERVER_WAIT_STEP: Duration = Duration::from_secs(2);
+// Upper bound on heartbeats buffered while the server is unreachable.
+const QUEUE_MAX: usize = 1000;
+
+/// Retry `f` until it succeeds or `SERVER_WAIT_MAX` has passed, logging each wait.
+fn wait_for_server<T, E: std::fmt::Display>(what: &str, mut f: impl FnMut() -> Result<T, E>) -> T {
+    let start = std::time::Instant::now();
+    loop {
+        match f() {
+            Ok(v) => return v,
+            Err(e) => {
+                if start.elapsed() >= SERVER_WAIT_MAX {
+                    panic!("Failed to {} after {}s: {}", what, SERVER_WAIT_MAX.as_secs(), e);
+                }
+                println!("Could not {} ({}), retrying in {}s", what, e, SERVER_WAIT_STEP.as_secs());
+                std::thread::sleep(SERVER_WAIT_STEP);
+            }
+        }
+    }
+}
+
+/// Sends heartbeats, buffering them in a bounded queue while the server is
+/// unreachable and flushing them (oldest first) once it is back.
+struct HeartbeatSender {
+    client: aw_client_rust::blocking::AwClient,
+    queue: std::collections::VecDeque<(String, aw_client_rust::Event)>,
+}
+
+impl HeartbeatSender {
+    fn new(client: aw_client_rust::blocking::AwClient) -> Self {
+        HeartbeatSender { client, queue: std::collections::VecDeque::new() }
+    }
+
+    fn send(&mut self, bucket: &str, event: &aw_client_rust::Event) {
+        self.queue.push_back((bucket.to_string(), event.clone()));
+        while self.queue.len() > QUEUE_MAX {
+            self.queue.pop_front();
+        }
+        while let Some((bucket, event)) = self.queue.front() {
+            if self.client.heartbeat(bucket, event, HEARTBEAT_INTERVAL_MARGIN_S).is_err() {
+                println!("Failed to send heartbeat, {} queued", self.queue.len());
+                return;
+            }
+            self.queue.pop_front();
+        }
+    }
+}
+
 static HEARTBEAT_INTERVAL_MS : u32 = 5000;
 static HEARTBEAT_INTERVAL_MARGIN_S : f64 = (HEARTBEAT_INTERVAL_MS + 1000) as f64 / 1000.0;
 
@@ -152,10 +202,9 @@ fn main() {
     let hostname = gethostname::gethostname().into_string().unwrap();
     let window_bucket = format!("aw-watcher-window_{}", hostname);
     let afk_bucket = format!("aw-watcher-afk_{}", hostname);
-    client.create_bucket_simple(&window_bucket, "currentwindow")
-        .expect("Failed to create window bucket");
-    client.create_bucket_simple(&afk_bucket, "afkstatus")
-        .expect("Failed to create afk bucket");
+    wait_for_server("create window bucket", || client.create_bucket_simple(&window_bucket, "currentwindow"));
+    wait_for_server("create afk bucket", || client.create_bucket_simple(&afk_bucket, "afkstatus"));
+    let mut sender = HeartbeatSender::new(client);
 
     println!("### Watcher is now running");
     let mut events = Events::with_capacity(1);
@@ -172,19 +221,13 @@ fn main() {
 
                     if let Some(ref prev_window) = prev_window {
                         let window_event = window_to_event(&prev_window);
-                        if client.heartbeat(&window_bucket, &window_event, HEARTBEAT_INTERVAL_MARGIN_S).is_err() {
-                            println!("Failed to send heartbeat");
-                            break;
-                        }
+                        sender.send(&window_bucket, &window_event);
                     }
 
                     match current_window::get_focused_window() {
                         Some(current_window) => {
                             let window_event = window_to_event(&current_window);
-                            if client.heartbeat(&window_bucket, &window_event, HEARTBEAT_INTERVAL_MARGIN_S).is_err() {
-                                println!("Failed to send heartbeat");
-                                break;
-                            }
+                            sender.send(&window_bucket, &window_event);
                             prev_window = Some(current_window);
                         },
                         None => {
@@ -194,10 +237,7 @@ fn main() {
 
                     if is_idle_active {
                         let afk_event = idle::get_current_afk_event();
-                        if client.heartbeat(&afk_bucket, &afk_event, HEARTBEAT_INTERVAL_MARGIN_S).is_err() {
-                            println!("Failed to send heartbeat");
-                            break;
-                        }
+                        sender.send(&afk_bucket, &afk_event);
                     }
                 },
                 TIMER => {
@@ -206,18 +246,12 @@ fn main() {
 
                     if let Some(ref prev_window) = prev_window {
                         let window_event = window_to_event(&prev_window);
-                        if client.heartbeat(&window_bucket, &window_event, HEARTBEAT_INTERVAL_MARGIN_S).is_err() {
-                            println!("Failed to send heartbeat");
-                            break;
-                        }
+                        sender.send(&window_bucket, &window_event);
                     }
 
                     if is_idle_active {
                         let afk_event = idle::get_current_afk_event();
-                        if client.heartbeat(&afk_bucket, &afk_event, HEARTBEAT_INTERVAL_MARGIN_S).is_err() {
-                            println!("Failed to send heartbeat");
-                            break;
-                        }
+                        sender.send(&afk_bucket, &afk_event);
                     }
                 },
                 _ => panic!("Invalid token!")
