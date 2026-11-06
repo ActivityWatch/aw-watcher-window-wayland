@@ -13,15 +13,18 @@
 #
 # Installation:
 # 1. Build and install with: make install
-#    This installs both the binary and service file to ~/.local/
+#    This installs the binary to ~/.local/bin and this unit, with ExecStart
+#    pointing there, to ~/.config/systemd/user
 # 2. Import Wayland environment: systemctl --user import-environment WAYLAND_DISPLAY
-#    (Add this to your session startup script, e.g., ~/.config/sway/config or ~/.xinitrc)
+#    (Add this to your compositor's startup, e.g. ~/.config/sway/config;
+#    `make setup-wayland` does it for sway and Hyprland)
 # 3. Reload systemd: systemctl --user daemon-reload
 # 4. Enable the service: systemctl --user enable aw-watcher-window-wayland.service
 # 5. Start the service: systemctl --user start aw-watcher-window-wayland.service
 #
-# For system-wide installation (not recommended for user services):
-#    sudo make install
+# For system-wide installation (binary in /usr/local/bin, unit available to
+# every user):
+#    make && sudo make install
 #
 # The watcher waits for two things before it starts:
 #   1. aw-server listening on port 5600
@@ -43,8 +46,6 @@ After=aw-server.service
 # Wants= (not Requires=) so aw-server going down doesn't stop the watcher;
 # the watcher handles aw-server outages internally via heartbeat retries.
 Wants=aw-server.service
-# Wait for aw-server to be fully ready and listening on port 5600
-After=network.target
 # Advisory only: After= orders against graphical-session.target just for
 # compositors that actually activate it. Many (e.g. a hand-started sway) never
 # do, leaving the target inactive and this line a no-op -- which is why the
@@ -55,11 +56,15 @@ StartLimitBurst=60
 
 [Service]
 Type=simple
-ExecStart=aw-watcher-window-wayland
+# make install rewrites this to the path it installed the binary to
+ExecStart=/usr/local/bin/aw-watcher-window-wayland
 Restart=always
 RestartSec=10
-# Wait indefinitely for aw-server to be listening before starting
-ExecStartPre=/bin/sh -c 'until nc -z localhost 5600; do sleep 5; done'
+# Wait indefinitely for aw-server to be listening before starting. bash's
+# /dev/tcp needs no extra tools (nc is often not installed); the subshell
+# keeps a failed redirection from aborting the loop, and its "Connection
+# refused" goes to /dev/null rather than into the journal every 5s.
+ExecStartPre=/bin/bash -c 'until (exec 3<>/dev/tcp/localhost/5600) 2>/dev/null; do sleep 5; done'
 # Wait indefinitely for a compositor. Checking the socket alone would race: a
 # compositor creates its socket and only then imports WAYLAND_DISPLAY, and
 # starting in that window leaves the watcher unable to find the display.

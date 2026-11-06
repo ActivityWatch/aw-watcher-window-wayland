@@ -23,8 +23,8 @@
 
 set -u
 cd "$(dirname "$0")/.."
+. tests/unit_lib.sh
 
-unit=aw-watcher-window-wayland.service
 tmpdir=$(mktemp -d)
 sock_pids="$tmpdir/sock.pids"
 : > "$sock_pids"
@@ -40,26 +40,13 @@ cleanup() {
 }
 trap cleanup EXIT
 
-fail() { echo "FAIL: $*" >&2; exit 1; }
-ok() { echo "ok - $*"; }
-
 # 77 is the automake "skip" convention, but make(1) aborts the whole recipe on
 # any non-zero status, so the Makefile maps it back to 0.
 command -v python3 >/dev/null || { echo "SKIP: python3 not installed"; exit 77; }
 command -v timeout >/dev/null || { echo "SKIP: timeout not installed"; exit 77; }
 
 # --- extract the wait expression from the unit -----------------------------
-# systemd unescapes '$$' to a literal '$' before handing the line to /bin/sh;
-# mirror that here so we run exactly what sh will receive.
-line=$(grep '^ExecStartPre=' "$unit" | grep WAYLAND_DISPLAY)
-[ -n "$line" ] || fail "no ExecStartPre in $unit waits for WAYLAND_DISPLAY"
-
-expr=${line#ExecStartPre=/bin/sh -c }
-case "$expr" in
-    "'"*"'") expr=${expr#\'}; expr=${expr%\'} ;;
-    *) fail "WAYLAND_DISPLAY ExecStartPre is not a /bin/sh -c '...' command: $line" ;;
-esac
-expr=${expr//\$\$/\$}
+extract_exec_start_pre WAYLAND_DISPLAY
 ok "extracted wait expression from $unit"
 
 # --- fake systemd user environment -----------------------------------------
@@ -95,7 +82,7 @@ make_socket() {
 
 # The gate polls every 5s, so a "must block" timeout has to exceed that or it
 # only proves the predicate was false once, not that the loop keeps polling.
-run_wait() { timeout "$1" /bin/sh -c "$expr"; }
+run_wait() { timeout "$1" "$shell" -c "$expr"; }
 BLOCK=7
 RETURN=25
 
