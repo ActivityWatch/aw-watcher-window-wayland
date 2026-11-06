@@ -110,13 +110,15 @@ disable-service: not-sudo
 	systemctl --user disable aw-watcher-window-wayland
 	@echo "Service disabled."
 
+# Only an uncommented exec line counts as configured: a commented-out one
+# never runs, and the service would wait for WAYLAND_DISPLAY forever.
 setup-wayland: enable-service
 	@echo "Configuring Wayland environment import..."
 	@echo ""
 	@echo "Detecting compositor configuration files..."
 	@if [ -f ~/.config/sway/config ]; then \
 		echo "Found Sway config at ~/.config/sway/config"; \
-		if grep -q "systemctl --user import-environment WAYLAND_DISPLAY" ~/.config/sway/config; then \
+		if grep -Eq '^[[:space:]]*exec(_always)?[[:space:]]+systemctl --user import-environment[^#]*WAYLAND_DISPLAY' ~/.config/sway/config; then \
 			echo "✓ Environment import already configured"; \
 		else \
 			echo "" >> ~/.config/sway/config; \
@@ -127,7 +129,7 @@ setup-wayland: enable-service
 		fi; \
 	elif [ -f ~/.config/hypr/hyprland.conf ]; then \
 		echo "Found Hyprland config at ~/.config/hypr/hyprland.conf"; \
-		if grep -q "systemctl --user import-environment WAYLAND_DISPLAY" ~/.config/hypr/hyprland.conf; then \
+		if grep -Eq '^[[:space:]]*exec(-once)?[[:space:]]*=[[:space:]]*systemctl --user import-environment[^#]*WAYLAND_DISPLAY' ~/.config/hypr/hyprland.conf; then \
 			echo "✓ Environment import already configured"; \
 		else \
 			echo "" >> ~/.config/hypr/hyprland.conf; \

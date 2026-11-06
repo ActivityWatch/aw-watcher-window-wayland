@@ -51,8 +51,12 @@ Wants=aw-server.service
 # do, leaving the target inactive and this line a no-op -- which is why the
 # compositor wait below, not this ordering, is what makes startup reliable.
 After=graphical-session.target
-StartLimitIntervalSec=7200
-StartLimitBurst=60
+# No start limit: the compositor gate only checks that the socket exists, so a
+# socket left behind by a crashed compositor lets the watcher start and fail
+# repeatedly. A start limit would then leave the unit failed for good, even
+# after a working compositor comes back. Restart backoff (below) keeps the
+# endless retries cheap instead.
+StartLimitIntervalSec=0
 
 [Service]
 Type=simple
@@ -60,6 +64,12 @@ Type=simple
 ExecStart=/usr/local/bin/aw-watcher-window-wayland
 Restart=always
 RestartSec=10
+# Back off from 10s to at most 1 minute between restarts (systemd >= 254;
+# older versions ignore these and retry every 10s). systemd resets the backoff
+# only on a manual start or reset-failed, not after a long healthy run, so
+# after a few crashes every restart waits the full minute.
+RestartSteps=5
+RestartMaxDelaySec=1min
 # Wait indefinitely for aw-server to be listening before starting. bash's
 # /dev/tcp needs no extra tools (nc is often not installed); the subshell
 # keeps a failed redirection from aborting the loop, and its "Connection

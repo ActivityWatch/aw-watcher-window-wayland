@@ -4,9 +4,9 @@
 #
 # Background: the service is WantedBy=default.target, so on a machine where
 # the compositor is started manually it is launched at login, minutes before
-# any compositor exists. get_wl_display() then panics (exit 101) and the unit
-# burns through StartLimitBurst long before the compositor shows up, leaving
-# the watcher dead for the rest of the session.
+# any compositor exists. get_wl_display() then panics (exit 101), and with a
+# start limit the unit used up its restarts long before the compositor showed
+# up, leaving the watcher dead for the rest of the session.
 #
 # Waiting for the socket alone is not enough: a compositor creates its socket
 # and only then runs `systemctl --user import-environment WAYLAND_DISPLAY`.
@@ -123,5 +123,17 @@ late_pid=$!
 run_wait $RETURN || { kill $late_pid 2>/dev/null; fail "wait did not pick up a compositor that started later"; }
 kill $late_pid 2>/dev/null
 ok "returns when the compositor starts after the unit"
+
+# --- restart policy ---------------------------------------------------------
+# The gate only checks that the socket exists, so a socket a crashed
+# compositor left behind lets the watcher start and fail over and over. With
+# a start limit that ends in a failed unit, which stays failed after a working
+# compositor comes back; the unit must keep retrying instead, backing off.
+directive() { sed -n "s/^$1=//p" "$unit"; }
+[ "$(directive StartLimitIntervalSec)" = 0 ] || fail "StartLimitIntervalSec is '$(directive StartLimitIntervalSec)', want 0 (no start limit)"
+[ -z "$(directive StartLimitBurst)" ] || fail "StartLimitBurst is set, but there should be no start limit"
+[ "$(directive Restart)" = always ] || fail "Restart is '$(directive Restart)', want always"
+[ -n "$(directive RestartSteps)" ] && [ -n "$(directive RestartMaxDelaySec)" ] || fail "no restart backoff (RestartSteps/RestartMaxDelaySec)"
+ok "the unit retries forever, with backoff"
 
 echo "PASS"

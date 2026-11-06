@@ -16,6 +16,9 @@
 #   as root;
 # - a DESTDIR install (packaging) stays inside DESTDIR, even without sudo, and
 #   DESTDIR/PREFIX are taken from the environment as well as the command line;
+# - the tests never see the real uid, so running them as root stays
+#   sandboxed, and a root install without sudo targets /usr/local;
+# - setup-wayland ignores a commented-out import line;
 # - enable-service and setup-wayland get past `systemctl status`, which exits
 #   3 while the unit is still waiting in start-pre.
 
@@ -39,6 +42,11 @@ for cmd in cargo systemctl; do
 done
 # Like the real thing for a unit sitting in "activating (start-pre)".
 printf 'case "$*" in *" status "*) exit 3 ;; esac\n' >> "$tmpdir/stubs/systemctl"
+# id -u reports $FAKE_UID (default: a normal user), so the Makefile never sees
+# the real uid: run as root, it would otherwise install into /usr/local.
+real_id=$(command -v id)
+printf '#!/bin/sh\n[ "$*" = -u ] && { echo "${FAKE_UID:-1000}"; exit 0; }\nexec "%s" "$@"\n' "$real_id" > "$tmpdir/stubs/id"
+chmod +x "$tmpdir/stubs/id"
 export PATH="$tmpdir/stubs:$PATH"
 
 fake_build() { mkdir -p "$src/target/release"; printf '#!/bin/sh\n' > "$src/target/release/$bin"; }
@@ -95,6 +103,12 @@ installed=$tmpdir/home/.config/systemd/user/$unit
 [ "$(exec_start "$installed")" = "$tmpdir/envopt/bin/$bin" ] || fail "PREFIX from the environment ignored; ExecStart is '$(exec_start "$installed")'"
 ok "PREFIX is taken from the environment"
 
+# --- root install (no sudo) -------------------------------------------------
+# -n only: as root the install would write outside the sandbox.
+run_make FAKE_UID=0 -- -n install || fail "make -n install as root failed: $(cat "$tmpdir/out")"
+grep -q "/usr/local/bin/$bin" "$tmpdir/out" || fail "root install does not target /usr/local/bin: $(cat "$tmpdir/out")"
+ok "root install targets /usr/local"
+
 # --- sudo install ----------------------------------------------------------
 dest=$tmpdir/dest
 run_make SUDO_USER=nobody -- install DESTDIR="$dest" || fail "sudo make install failed: $(cat "$tmpdir/out")"
@@ -142,5 +156,23 @@ run_make -- setup-wayland || fail "second make setup-wayland failed: $(tail -3 "
 [ "$(grep -c 'import-environment WAYLAND_DISPLAY' "$tmpdir/home/.config/sway/config")" -eq 1 ] \
     || fail "setup-wayland added the import line twice"
 ok "make setup-wayland writes the sway import line once"
+
+# A commented-out import line does not run, so it must not count.
+printf '# exec systemctl --user import-environment WAYLAND_DISPLAY\n' > "$tmpdir/home/.config/sway/config"
+run_make -- setup-wayland || fail "make setup-wayland failed: $(tail -3 "$tmpdir/out")"
+[ "$(grep -c '^exec systemctl --user import-environment WAYLAND_DISPLAY$' "$tmpdir/home/.config/sway/config")" -eq 1 ] \
+    || fail "setup-wayland took a commented-out sway import line for an active one"
+ok "make setup-wayland ignores a commented-out sway import line"
+
+rm -rf "$tmpdir/home/.config/sway"
+mkdir -p "$tmpdir/home/.config/hypr"
+printf '#exec-once = systemctl --user import-environment WAYLAND_DISPLAY\n' > "$tmpdir/home/.config/hypr/hyprland.conf"
+run_make -- setup-wayland || fail "make setup-wayland failed: $(tail -3 "$tmpdir/out")"
+[ "$(grep -c '^exec-once = systemctl --user import-environment WAYLAND_DISPLAY$' "$tmpdir/home/.config/hypr/hyprland.conf")" -eq 1 ] \
+    || fail "setup-wayland took a commented-out Hyprland import line for an active one"
+run_make -- setup-wayland || fail "second make setup-wayland failed: $(tail -3 "$tmpdir/out")"
+[ "$(grep -c '^exec-once = systemctl' "$tmpdir/home/.config/hypr/hyprland.conf")" -eq 1 ] \
+    || fail "setup-wayland added the Hyprland import line twice"
+ok "make setup-wayland handles Hyprland, ignoring a commented-out line"
 
 echo "PASS"
