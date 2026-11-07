@@ -112,6 +112,9 @@ disable-service: not-sudo
 
 # Only an uncommented exec line counts as configured: a commented-out one
 # never runs, and the service would wait for WAYLAND_DISPLAY forever.
+# The line it adds runs only when the compositor starts (sway's exec,
+# Hyprland's exec-once), not on a config reload, so for the session already
+# running, WAYLAND_DISPLAY is imported directly when make can see it.
 setup-wayland: enable-service
 	@echo "Configuring Wayland environment import..."
 	@echo ""
@@ -125,7 +128,7 @@ setup-wayland: enable-service
 			echo "# Import WAYLAND_DISPLAY for systemd services" >> ~/.config/sway/config; \
 			echo "exec systemctl --user import-environment WAYLAND_DISPLAY" >> ~/.config/sway/config; \
 			echo "✓ Added environment import to Sway config"; \
-			echo "  Please reload Sway config or log out and back in"; \
+			echo "  It runs from your next login on: a config reload does not run it"; \
 		fi; \
 	elif [ -f ~/.config/hypr/hyprland.conf ]; then \
 		echo "Found Hyprland config at ~/.config/hypr/hyprland.conf"; \
@@ -136,7 +139,7 @@ setup-wayland: enable-service
 			echo "# Import WAYLAND_DISPLAY for systemd services" >> ~/.config/hypr/hyprland.conf; \
 			echo "exec-once = systemctl --user import-environment WAYLAND_DISPLAY" >> ~/.config/hypr/hyprland.conf; \
 			echo "✓ Added environment import to Hyprland config"; \
-			echo "  Please reload Hyprland config or log out and back in"; \
+			echo "  It runs from your next login on: a config reload does not run it"; \
 		fi; \
 	else \
 		echo "Could not detect compositor config file."; \
@@ -150,12 +153,15 @@ setup-wayland: enable-service
 		echo "  - Others: check your compositor documentation"; \
 	fi
 	@echo ""
+	@if [ -n "$$WAYLAND_DISPLAY" ]; then \
+		echo "Importing WAYLAND_DISPLAY=$$WAYLAND_DISPLAY into the running session..."; \
+		systemctl --user import-environment WAYLAND_DISPLAY; \
+	else \
+		echo "⚠ WAYLAND_DISPLAY is not set here: run this from a terminal in your"; \
+		echo "  Wayland session, or log out and back in."; \
+	fi
 	@echo "Restarting service to pick up environment changes..."
-	@systemctl --user restart --no-block aw-watcher-window-wayland 2>/dev/null || echo "Note: Service restart will happen after compositor reload"
+	@systemctl --user restart --no-block aw-watcher-window-wayland 2>/dev/null || echo "Note: the service will start after your next login"
 	@echo ""
-	@echo "⚠ IMPORTANT: The environment variable will only be available after:"
-	@echo "  1. Reloading your compositor config, OR"
-	@echo "  2. Logging out and back in"
-	@echo ""
-	@echo "After that, verify the service is working:"
+	@echo "Then verify the service is working:"
 	@echo "  systemctl --user status aw-watcher-window-wayland"

@@ -18,7 +18,9 @@
 #   DESTDIR/PREFIX are taken from the environment as well as the command line;
 # - the tests never see the real uid, so running them as root stays
 #   sandboxed, and a root install without sudo targets /usr/local;
-# - setup-wayland ignores a commented-out import line;
+# - setup-wayland ignores a commented-out import line, and imports
+#   WAYLAND_DISPLAY into the running session, as the line it adds only runs
+#   at the next login;
 # - enable-service and setup-wayland get past `systemctl status`, which exits
 #   3 while the unit is still waiting in start-pre.
 
@@ -51,13 +53,16 @@ export PATH="$tmpdir/stubs:$PATH"
 
 fake_build() { mkdir -p "$src/target/release"; printf '#!/bin/sh\n' > "$src/target/release/$bin"; }
 # run_make ENV... -- MAKE-ARGS...: run make in the sandbox with a fresh log and
-# no inherited SUDO_USER/DESTDIR/PREFIX, so the developer's shell can't leak in.
+# an empty environment apart from PATH, HOME and ENV, so neither the
+# developer's shell (SUDO_USER, DESTDIR, PREFIX, FAKE_UID, ...) nor an outer
+# make can leak in: `make PREFIX=/usr test` passes PREFIX=/usr on to nested
+# makes through MAKEFLAGS.
 run_make() {
     local envs=()
     while [ "$1" != -- ]; do envs+=("$1"); shift; done
     shift
     : > "$log"
-    env -u SUDO_USER -u DESTDIR -u PREFIX -u RELEASE HOME="$tmpdir/home" "${envs[@]}" \
+    env -i PATH="$PATH" HOME="$tmpdir/home" "${envs[@]}" \
         make --no-print-directory -C "$src" "$@" > "$tmpdir/out" 2>&1
 }
 exec_start() { sed -n 's/^ExecStart=//p' "$1"; }
@@ -74,15 +79,19 @@ grep -q '^cargo build' "$tmpdir/out" || fail "bare make does not build; it ran: 
 ok "bare make builds"
 
 # --- user install ----------------------------------------------------------
+# Run with the caller's environment set as hostile as it gets, including
+# what an outer `make PREFIX=... test` passes on: none of it may reach make.
 fake_build
-run_make -- install || fail "make install failed: $(cat "$tmpdir/out")"
+PREFIX=/nonexistent.invalid MAKEFLAGS=PREFIX=/nonexistent.invalid MAKEOVERRIDES=PREFIX=/nonexistent.invalid \
+    DESTDIR=/nonexistent.invalid SUDO_USER=nobody SYSTEM_INSTALL=yes FAKE_UID=0 \
+    run_make -- install || fail "make install failed: $(cat "$tmpdir/out")"
 grep -q '^cargo build' "$log" || fail "make install did not build first"
 installed=$tmpdir/home/.config/systemd/user/$unit
 [ -f "$installed" ] || fail "make install did not install $installed"
 want=$tmpdir/home/.local/bin/$bin
 [ -x "$want" ] || fail "make install did not install $want"
 [ "$(exec_start "$installed")" = "$want" ] || fail "installed ExecStart is '$(exec_start "$installed")', want '$want'"
-ok "user install points ExecStart at ~/.local/bin"
+ok "user install points ExecStart at ~/.local/bin, whatever the caller's environment"
 
 run_make -- install PREFIX="$tmpdir/opt" || fail "make install PREFIX=... failed: $(cat "$tmpdir/out")"
 [ "$(exec_start "$installed")" = "$tmpdir/opt/bin/$bin" ] || fail "with PREFIX set, installed ExecStart is '$(exec_start "$installed")'"
@@ -149,13 +158,24 @@ ok "sudo make disable-service refuses"
 
 mkdir -p "$tmpdir/home/.config/sway"
 echo "# sway config" > "$tmpdir/home/.config/sway/config"
-run_make -- setup-wayland || fail "make setup-wayland failed: $(tail -3 "$tmpdir/out")"
+WAYLAND_DISPLAY=wayland-leak run_make -- setup-wayland || fail "make setup-wayland failed: $(tail -3 "$tmpdir/out")"
+grep -q '^systemctl --user import-environment' "$log" && fail "setup-wayland imported WAYLAND_DISPLAY without one set"
+ok "make setup-wayland imports nothing without WAYLAND_DISPLAY"
 [ "$(grep -c '^exec systemctl --user import-environment WAYLAND_DISPLAY$' "$tmpdir/home/.config/sway/config")" -eq 1 ] \
     || fail "setup-wayland did not add the import line to the sway config"
 run_make -- setup-wayland || fail "second make setup-wayland failed: $(tail -3 "$tmpdir/out")"
 [ "$(grep -c 'import-environment WAYLAND_DISPLAY' "$tmpdir/home/.config/sway/config")" -eq 1 ] \
     || fail "setup-wayland added the import line twice"
 ok "make setup-wayland writes the sway import line once"
+
+# The config line only runs at the next login, so the running session gets
+# WAYLAND_DISPLAY imported directly.
+run_make WAYLAND_DISPLAY=wayland-1 -- setup-wayland || fail "make setup-wayland failed: $(tail -3 "$tmpdir/out")"
+grep -q '^systemctl --user import-environment WAYLAND_DISPLAY$' "$log" \
+    || fail "setup-wayland did not import WAYLAND_DISPLAY into the running session: $(cat "$log")"
+ok "make setup-wayland imports WAYLAND_DISPLAY into the running session"
+grep -qi 'reload' "$tmpdir/out" && fail "setup-wayland suggests a compositor reload, which does not run the import: $(grep -i reload "$tmpdir/out")"
+ok "make setup-wayland does not suggest a compositor reload"
 
 # A commented-out import line does not run, so it must not count.
 printf '# exec systemctl --user import-environment WAYLAND_DISPLAY\n' > "$tmpdir/home/.config/sway/config"

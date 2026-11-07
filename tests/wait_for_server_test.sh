@@ -7,8 +7,10 @@
 # unit sits in "activating (start-pre)" forever even with aw-server running.
 #
 # Like wait_for_wayland_test.sh, this extracts the ExecStartPre from the
-# shipped unit file. The port is swapped for a free one so that an aw-server
-# running on this machine cannot make the test pass.
+# shipped unit file. localhost:5600 is swapped for 127.0.0.1 and a port the
+# test holds bound but not listening until it wants a listener, so neither an
+# aw-server on this machine, another process grabbing the port, nor anything
+# listening on ::1 can make the test pass or fail.
 
 set -u
 cd "$(dirname "$0")/.."
@@ -26,9 +28,16 @@ trap cleanup EXIT
 command -v python3 >/dev/null || { echo "SKIP: python3 not installed"; exit 77; }
 command -v timeout >/dev/null || { echo "SKIP: timeout not installed"; exit 77; }
 
-extract_exec_start_pre 5600
-port=$(python3 -c 'import socket; s=socket.socket(); s.bind(("127.0.0.1", 0)); print(s.getsockname()[1])')
-expr=${expr//5600/$port}
+# Binds a free port and prints it, then listens two seconds after a line
+# arrives on stdin. Until then a connect is refused.
+coproc LISTENER { exec python3 -c 'import socket,sys,time
+s=socket.socket(); s.bind(("127.0.0.1", 0)); print(s.getsockname()[1], flush=True)
+sys.stdin.readline(); time.sleep(2); s.listen(8); time.sleep(120)'; }
+listener_pid=$LISTENER_PID
+read -r port <&"${LISTENER[0]}" || fail "could not reserve a port"
+
+extract_exec_start_pre localhost/5600
+expr=${expr//localhost\/5600/127.0.0.1\/$port}
 ok "extracted aw-server wait expression from $unit"
 
 # Shadow any real nc with one that behaves as if it were not installed.
@@ -49,8 +58,7 @@ ok "blocks while aw-server is not listening"
 ok "polls silently"
 
 # --- aw-server comes up later -> must return, without nc -------------------
-( sleep 2; exec python3 -c 'import socket,sys,time; s=socket.socket(); s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1); s.bind(("127.0.0.1", int(sys.argv[1]))); s.listen(8); time.sleep(120)' "$port" ) &
-listener_pid=$!
+echo >&"${LISTENER[1]}"
 run_wait $RETURN || fail "wait did not return once aw-server was listening (does it depend on nc?)"
 ok "returns once aw-server listens, with no nc installed"
 
