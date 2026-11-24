@@ -259,3 +259,30 @@ fn main() {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::io::{Read, Write};
+    use std::net::TcpListener;
+
+    #[test]
+    fn heartbeat_rejected_by_server_is_not_silently_dropped() {
+        // Fake aw-server that answers every request with 404 (e.g. bucket deleted / DB reset).
+        let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+        let port = listener.local_addr().unwrap().port();
+        std::thread::spawn(move || {
+            for stream in listener.incoming() {
+                let mut s = stream.unwrap();
+                let mut buf = [0u8; 8192];
+                let _ = s.read(&mut buf);
+                let _ = s.write_all(b"HTTP/1.1 404 Not Found\r\nContent-Length: 0\r\nConnection: close\r\n\r\n");
+            }
+        });
+        let client = aw_client_rust::blocking::AwClient::new("127.0.0.1", port, "test").unwrap();
+        let mut sender = HeartbeatSender::new(client);
+        let w = current_window::Window { appid: "firefox".into(), title: "t".into() };
+        sender.send("aw-watcher-window_test", &window_to_event(&w));
+        assert_eq!(sender.queue.len(), 1, "404 heartbeat was treated as delivered and dropped");
+    }
+}
