@@ -41,6 +41,21 @@ pub fn get_focused_window() -> Option<Window> {
     }
 }
 
+/// New focused window id after toplevel `id` reports `state`.
+///
+/// `state` is a wl_array of u32 values; `activated` (2) means the window has focus.
+/// A window that loses activation must stop being reported as focused, even when no
+/// other toplevel becomes activated (empty workspace, last window minimized).
+fn update_focus(current: Option<u32>, id: u32, state: &[u8]) -> Option<u32> {
+    if state.contains(&2) { // 2 == activated; values are 0-3, so a byte check is exact
+        Some(id)
+    } else if current == Some(id) {
+        None
+    } else {
+        current
+    }
+}
+
 fn assign_toplevel_handle(toplevel_handle: &wayland_client::Main<ToplevelHandle>) -> () {
     use wl_client::toplevel_management::zwlr_foreign_toplevel_handle_v1::Event as HandleEvent;
 
@@ -63,13 +78,8 @@ fn assign_toplevel_handle(toplevel_handle: &wayland_client::Main<ToplevelHandle>
                     window.title = title.clone();
                 },
                 HandleEvent::State{ state } => {
-                    // TODO: Remove this clone
-                    for field in state {
-                        if field == 2 { // 2 == focused
-                            window_state.current_window = Some(id);
-                            break;
-                        }
-                    }
+                    window_state.current_window =
+                        update_focus(window_state.current_window, id, &state);
                 }
                 HandleEvent::Done => (),//println!("done"),
                 HandleEvent::Closed => {
@@ -108,4 +118,29 @@ pub fn assign_toplevel_manager(globals: &wayland_client::GlobalManager) -> () {
                 _ => panic!("Got an unexpected event!")
             }
         });
+}
+
+#[cfg(test)]
+mod tests {
+    use super::update_focus;
+
+    fn activated() -> Vec<u8> { 2u32.to_ne_bytes().to_vec() }
+
+    #[test]
+    fn activation_sets_focus() {
+        assert_eq!(update_focus(None, 1, &activated()), Some(1));
+        assert_eq!(update_focus(Some(2), 1, &activated()), Some(1));
+    }
+
+    #[test]
+    fn losing_activation_clears_focus() {
+        assert_eq!(update_focus(Some(1), 1, &[]), None);
+        // maximized (0) without activated
+        assert_eq!(update_focus(Some(1), 1, &0u32.to_ne_bytes()), None);
+    }
+
+    #[test]
+    fn other_window_state_change_keeps_focus() {
+        assert_eq!(update_focus(Some(1), 2, &[]), Some(1));
+    }
 }
